@@ -2,24 +2,22 @@ import sys
 
 from pysmt.operators import __OP_STR__
 
-from preprocessing import op
-
 sys.setrecursionlimit(1000000)
 # from Tree import varTree as Tree
 from preprocessing.feature_extraction import *
 
-class pysmt_query_tree(feature_extractor):
+class abstract_tree_extraction(feature_extractor):
     # def __init__(self, script_info, time_selection="origin"):
     #     query_tree.__init__(script_info, time_selection)
 
     def script_to_feature(self):
         data = self.script_info.script
         self.cal_training_label()
-        assertions = self.get_variable(data)
+        assertions = self.handle_variable_defination(data)
         # for var_name in self.val_list:
         #     data = data.replace(var_name, self.val_dic[var_name])
         try:
-            # parse assertion stack into expression trees
+            # parse assertion stack into abstract trees
             self.assertions_to_feature_list(assertions)
             # merging sub tree: bottom_up_merging or accumulation
             self.accumulation()
@@ -130,6 +128,7 @@ class pysmt_query_tree(feature_extractor):
                 features += self.fnode_to_feature(subnode)
         return features
 
+    #
     def parse_klee_smt(self, asserts):
         self.feature_list = []
         try:

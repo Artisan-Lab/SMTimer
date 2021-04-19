@@ -8,14 +8,14 @@ pysmt_op = ["forall", "exists", "and", "or", "not", "implies", "iff", "symbol", 
       "str.suffixof", "str.to_int", "str.from_int", "str.at", "select", "store", "value", "/", "^",
       "algebraic_constant", "bv2nat"]
 
-lib_op = ["compressed_op", "unknown", "distinct", ">=", ">", "bvuge", "bvugt", "bvsge", "bvsgt", "str.in_re",
+other_op = ["compressed_op", "unknown", "distinct", ">=", ">", "bvuge", "bvugt", "bvsge", "bvsgt", "str.in_re",
           "str.to_re", "to_fp",  "re.range", "re.union", "re.++", "re.+", "re.*", "re.allchar", "re.none"]
 
 fp_op = ["fp", "fp.neg", "fp.isZero", "fp.isNormal", "fp.isSubnormal", "fp.isPositive", "fp.isInfinite", "fp.isNan",
          "fp.eq", "fp.roundToIntegral", "fp.rem", "fp.sub", "fp.sqrt", "fp.lt", "fp.leq", "fp.gt", "fp.geq", "fp.abs",
          "fp.add", "fp.div", "fp.min", "fp.max", "fp.mul", "fp.to_sbv", "fp.to_ubv"]
 
-op = pysmt_op + lib_op
+op = pysmt_op + other_op
 
 none_op = ["extract", "zero_extend", "sign_extend", "to_fp", "repeat", "+oo", "-oo"]
 
@@ -114,26 +114,6 @@ class varTree(Tree):
             self.replace_children(self.left)
         else:
             self.replace_children(self.mid)
-
-    # def reduce_ite(self):
-    #     if not self.left:
-    #         return
-    #     if not self.mid:
-    #         return
-    #     if not self.right:
-    #         return
-    #     var = set()
-    #     depth = 0
-    #     for children in [self.left, self.mid, self.right]:
-    #         var.update(children.var)
-    #         depth = max(depth, children.depth)
-    #     for children in [self.left, self.mid, self.right]:
-    #         if var == children.var and depth == children.depth:
-    #             self.replace_children(children)
-    #             return
-    #     for children in [self.left, self.mid, self.right]:
-    #         if depth == children.depth:
-    #             self.replace_children(children)
 
     def replace_children(self, tree):
         self.val = tree.val

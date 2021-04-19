@@ -9,19 +9,10 @@ class Metrics():
 
     def confusion_matrix(self, predictions, labels):
         confusion_matrix = torch.zeros(2, 2)
-        # for i in range(len(predictions)):
-        #     confusion[int(predictions[i])][int(labels[i])] += 1
         for t, p in zip(labels.view(-1), predictions.view(-1)):
             confusion_matrix[t.long(), p.long()] += 1
         print("confusion_matrix: ")
         print(confusion_matrix)
-        # precision = confusion_matrix.diag() / confusion_matrix.sum(1)
-        #
-        # recall = confusion_matrix.diag() / confusion_matrix.sum(1)
-        #
-        # f1 = 2 * precision * recall / (precision + recall)
-        #
-        # mean = f1.diagonal().mean()
         return confusion_matrix
 
     def f1_score(self, predictions, labels):

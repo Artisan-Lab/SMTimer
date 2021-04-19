@@ -1,22 +1,23 @@
 import json
-import time
 import os
 import random
 import sys
 import gc
+# signal used to stop extremely long time of parse, no supported on Windows, remove if needed
 import signal
 
-from .feature_extraction import Script_Info, feature_extractor, QT
-from preprocessing.pysmt_tree import pysmt_query_tree
+from .feature_extraction import Script_Info, feature_extractor
+from .feature_structure import AST
+from preprocessing.abstract_tree_extraction import abstract_tree_extraction
 
-b = ["[","chmod","dd","expr","hostid","md5sum","nproc","ptx","sha224sum","stdbuf","touch","unlink","b2sum","chown","df",
+gnucore_file_list = ["[", "chmod", "dd", "expr", "hostid", "md5sum", "nproc", "ptx", "sha224sum", "stdbuf", "touch", "unlink", "b2sum", "chown", "df",
 "factor","id","mkdir","numfmt","pwd","sha256sum","stty","tr","uptime","base32","chroot","dir","false","join","mkfifo",
 "od","readlink","sha384sum","sum","true","users","base64","cksum","dircolors","fmt","kill","mknod","paste","realpath",
 "sha512sum","sync","truncate","vdir","basename","comm","dirname","fold","link","mktemp","pathchk","rm","shred","tac",
-"tsort","wc","basenc","cp","du","getlimits","ln","mv","pinky","rmdir","shuf","tail","tty","who","cat","csplit","echo",
-"ginstall","logname","nice","pr","runcon","sort","tee","uname","whoami","chcon","cut","env","groups","ls","nl",
-"printenv","seq","split","test","unexpand","yes","chgrp","date","expand","head","make-prime-list","nohup","printf",
-"sha1sum","stat","timeout","uniq"]
+"tsort","wc","basenc","cp", "du", "getlimits", "ln", "mv", "pinky", "rmdir", "shuf", "tail", "tty", "who", "cat", "csplit", "echo",
+                     "ginstall", "logname", "nice", "pr", "runcon", "sort", "tee", "uname", "whoami", "chcon", "cut", "env", "groups", "ls", "nl",
+                     "printenv", "seq", "split", "test", "unexpand", "yes", "chgrp", "date", "expand", "head", "make-prime-list", "nohup", "printf",
+                     "sha1sum", "stat", "timeout", "uniq"]
 
 test_filename = ["echo", "ginstall", "expr", "tail", "seq", "split", "test", "yes", "chgrp", "date", "expand", "head",
             "nohup", "printf", "sha1sum", "stat", "timeout", "uniq", "nice", "pr"]
@@ -27,119 +28,123 @@ def handler(signum, frame):
 
 # input all kinds of scripts and return expression tree
 class Dataset:
-    def __init__(self, feature_number_limit=100, treeforassert=False):
-        self.str_list = []
+    def __init__(self, feature_number_limit=100, treeforassert=False, save_address=None):
         self.script_list = []
-        self.qt_list = []
+        self.Script_Info_list = []
+        self.fs_list = []
         self.is_json = True
-        self.filename_list = []
+        self.input_filename_list = []
+        self.script_filename_list = []
         self.treeforassert = treeforassert
         self.feature_number_limit = feature_number_limit
         self.klee = False
         self.selected_file = False
+        self.save_address = save_address
 
-    # read data from file directory or script, preprocess scripts into expression trees
+    # read data from file directory or script, preprocess scripts into abstract trees
     def generate_feature_dataset(self, input, time_selection=None):
-        self.str_list = []
+        self.script_list = []
         if isinstance(input, list):
-            self.str_list = input
+            self.script_list = input
+            self.input_filename_list = [""]
         elif isinstance(input, str) and '\n' in input:
-            self.str_list = [input]
+            self.script_list = [input]
+            self.input_filename_list = [""]
         else:
             self.load_from_directory(input)
             if "klee" in input:
                 self.klee = True
-        self.judge_json(self.str_list[0])
+            if len(self.input_filename_list) == 0:
+                return
+            self.read_from_file(self.input_filename_list[0], "")
+            self.judge_json(self.script_list[0])
         output_ind = 0
         selected_filename = []
-        for ind, string in enumerate(self.str_list):
-            script = Script_Info(string, self.is_json)
-            # self.script_list.append(script)
-            s = time.time()
-            # try:
-            try:
-                if script.solving_time_dic["z3"][0] < 0:
+        for ind, string in enumerate(self.input_filename_list):
+            if string != "":
+                self.script_list = []
+                self.read_from_file(string, "")
+            for script_string in self.script_list:
+                script = Script_Info(script_string, self.is_json)
+                try:
+                    if script.solving_time_dic["z3"][0] < 0:
+                        continue
+                    if not self.selected_file and len(self.script_filename_list) > 30000:
+                        if script.solving_time < 20 and script.solving_time_dic["z3"][0] < 10:
+                            if ind % 10 != 0:
+                                continue
+                    selected_filename.append(script)
+                except:
+                    pass
+                signal.signal(signal.SIGALRM, handler)
+                signal.alarm(1)
+                try:
+                    ret = self.parse_data(script, time_selection)
+                    self.fs_list.append(ret)
+                    self.script_filename_list.append(string.split("/")[-1])
+                except TimeoutError:
+                    signal.alarm(0)
+                    print("preprocess over time", len(self.fs_list))
+                except (KeyError, AttributeError):
                     continue
-                # if not self.selected_file:
-                #     if script.solving_time < 20 and script.solving_time_dic["z3"][0] < 10:
-                #         if len(self.str_list) > 20000 and ind % 10 != 0:
-                #             continue
-                selected_filename.append(self.filename_list[ind])
-            except:
-                pass
-            gettrace = getattr(sys, 'gettrace', None)
-            # if gettrace is None and not gettrace():
-            # signal.alarm(1)
-            signal.signal(signal.SIGALRM, handler)
-            try:
-                ret = self.parse_data(script, time_selection)
-                self.qt_list.append(ret)
-            except TimeoutError:
-                signal.alarm(0)
-                print("preprocess over time", len(self.qt_list))
-            except (KeyError,AttributeError):
-                continue
-            finally:
-                signal.alarm(0)
-            if len(self.qt_list) % 500 == 0:
-                print(len(self.qt_list))
-                gc.collect()
-                # print(qt.feature, e-s)
-                # break
-                # if len(self.qt_list) % 4000 == 0:
-                #     th.save(self.qt_list, "/home/lsc/treelstm.pytorch/data/mid" + str(output_ind) + ".pkl")
-                #     output_ind += 1
-                #     del self.qt_list
-                #     gc.collect()
-                #     self.qt_list = []
-        # if not self.selected_file:
-        #     with open(os.path.dirname(input) + "/selected_file.txt", "w") as f:
-        #         for i in selected_filename:
-        #             f.write(i + "\n")
-        del self.str_list
-        return self.qt_list
+                finally:
+                    signal.alarm(0)
+                output_ind = self.print_and_write(output_ind)
+        if not self.selected_file and len(selected_filename) != None:
+            with open(os.path.dirname(input) + "/selected_file.txt", "w") as f:
+                for i in selected_filename:
+                    f.write(i + "\n")
+        del self.script_list
+        return self.fs_list
 
+    def print_and_write(self, output_ind):
+        if len(self.fs_list) % 500 == 0:
+            print("not implement, don't matter if memory is enough.")
+
+    # should not be used
     def parse_data(self, script, time_selection):
+        print("not implement")
         if not self.treeforassert and not self.klee:
-        # # if not self.klee:
-        #     # my own parse for angr and smt-comp has been abandoned,to construct tree for asserts,please refer to pysmt
-            querytree = feature_extractor(script, time_selection, self.feature_number_limit)
-            querytree.treeforassert = self.treeforassert
+            # my own parse for angr and smt-comp has been abandoned,to construct tree for asserts,please refer to pysmt
+            featurestructure = feature_extractor(script, time_selection, self.feature_number_limit)
+            featurestructure.treeforassert = self.treeforassert
         else:
-            querytree = pysmt_query_tree(script, time_selection, self.feature_number_limit)
-            querytree.treeforassert = self.treeforassert
-        querytree.script_to_feature()
-        qt = QT(querytree)
-        del querytree.logic_tree, querytree.feature_list
-        del querytree
+            featurestructure = abstract_tree_extraction(script, time_selection, self.feature_number_limit)
+            featurestructure.treeforassert = self.treeforassert
+        featurestructure.script_to_feature()
+        ast = AST(featurestructure)
+        del featurestructure.logic_tree, featurestructure.feature_list
+        del featurestructure
         del script
-        return qt
+        return ast
 
+    # for data augment, to be mention, cut, combine and replace operator is not enough to generate high quality scripts
     def augment_scripts_dataset(self, input):
         if isinstance(input, list):
-            self.str_list = input
+            self.script_list = input
         elif isinstance(input, str) and '\n' in input:
-            self.str_list = [input]
+            self.script_list = [input]
         else:
             self.load_from_directory(input)
-        self.judge_json(self.str_list[0])
-        for string in self.str_list:
+        self.judge_json(self.script_list[0])
+        for string in self.script_list:
             script = Script_Info(string, self.is_json)
-            # self.script_list.append(script)
-        return self.script_list
+            self.Script_Info_list.append(script)
+        return self.Script_Info_list
 
-    # only accept files with single script
+    # only accept files with single script or specific design of KLEE "QF_AUFBV", to avoid running out of memory
+    # we only record the input file name into
     def load_from_directory(self, input):
         if not input or input == "":
             return
         if os.path.isdir(input):
+            selected_file = None
             try:
                 with open(os.path.dirname(input) + "/selected_file.txt") as f:
                     selected_file = f.read().split("\n")
                 self.selected_file = True
             except:
                 selected_file = None
-            selected_file = None
             for root, dirs, files in os.walk(input):
                 files.sort(key=lambda x: (len(x), x))
                 for file in files:
@@ -147,13 +152,13 @@ class Dataset:
                         continue
                     # if os.path.getsize(os.path.join(root, file)) > 512 * 1024:
                     #     continue
-                    self.read_from_file(file, os.path.join(root, file))
-                    # if len(self.str_list) == 500:
-                    #     return
+                    self.input_filename_list.append(os.path.join(root, file))
+                    # self.read_from_file(file, os.path.join(root, file))
         elif os.path.exists(input):
             self.read_from_file(None, input)
 
-    def read_from_file(self, file, input):
+    # specific design of KLEE "QF_AUFBV"
+    def read_from_file(self, input, file=None):
         with open(input) as f:
             # if os.path.getsize(input) > 512 * 1024 or "klee" in input:
             if "klee" in input and "single_test" not in input:
@@ -172,23 +177,19 @@ class Dataset:
                     if start:
                         script = script + text_line
                     if next == True:
-                        self.str_list.append(script)
-                        self.filename_list.append(file)
+                        self.script_list.append(script)
                         start = False
                         next = False
                         script = ""
-                        if len(self.str_list) % 200 == 0:
-                            print(len(self.str_list))
+                        if len(self.script_list) % 200 == 0:
+                            print(len(self.script_list))
                     if "(exit)" in text_line:
                         next = True
             else:
                 data = f.read()
                 if data != "":
-                    self.str_list.append(data)
-                    self.filename_list.append(file)
-                else:
-                    data = ""
-
+                    self.script_list.append(data)
+                    # self.input_filename_list.append(file)
 
     def judge_json(self, data):
         try:
@@ -197,15 +198,16 @@ class Dataset:
         except:
             pass
 
+    # split dataset with program file name, the script of program with input file name would be the test data
     def split_with_filename(self, test_filename=None):
         if not test_filename:
-            random.shuffle(b)
-            test_filename = b[:10]
+            random.shuffle(gnucore_file_list)
+            test_filename = gnucore_file_list[:10]
         train_dataset = []
         test_dataset = []
         trt = 0
         tet = 0
-        for qt in self.qt_list:
+        for qt in self.fs_list:
             if qt.filename in test_filename:
                 test_dataset.append(qt)
                 if qt.gettime() >= 300:
@@ -214,4 +216,4 @@ class Dataset:
                 train_dataset.append(qt)
                 if qt.gettime() >= 300:
                     trt += 1
-        return train_dataset,test_dataset
+        return train_dataset, test_dataset

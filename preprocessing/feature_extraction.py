@@ -10,8 +10,7 @@ from pysmt.smtlib.parser import SmtLibParser
 from six.moves import cStringIO
 from pysmt.operators import __OP_STR__
 
-from operators import reserved_word
-from preprocessing.operators import op, none_op, bv_constant, bool_constant
+from .Operators import op, none_op, bv_constant, bool_constant, reserved_word
 
 sys.setrecursionlimit(1000000)
 from collections import defaultdict
@@ -21,35 +20,13 @@ import re
 import numpy as np
 
 
-class QT:
-    def __init__(self, query_tree, filename=None):
-        self.logic_tree = query_tree.logic_tree
-        self.origin_time = query_tree.origin_time
-        self.adjust_time = query_tree.adjust_time
-        try:
-            self.filename = query_tree.script_info.filename
-        except:
-            self.filename = filename
-        # self.feature = [math.log(x + 1) for x in query_tree.feature]
-        self.feature = query_tree.feature
-
-    def gettime(self, time_selection="origin"):
-        try:
-            if time_selection == "origin":
-                return self.origin_time
-            else:
-                return self.adjust_time
-        except:
-            return self.timeout
-
-
 # SMT script file information, program name, solving time with symbolic tools, solving time with different solvers
 class Script_Info:
     def __init__(self, string, is_json=False):
         self.script = None
         self.filename = None
         self.solving_time = None
-        # a dict of solving time with different solvers as dict key, three solving time of each avoid variety
+        # a dict of solving time with different solvers as dict key, some solving time of each to avoid variety
         self.solving_time_dic = None
         self.is_json = is_json
         self.load(string)
@@ -100,7 +77,7 @@ class Script_Info:
             except:
                 self.script = str
 
-
+# main preprocessing, parse the SMT scripts to give out abstract tree or feature vector for later prediction
 class feature_extractor:
     def __init__(self, script_info, time_selection="origin", limit=100):
         self.feature_list = []
@@ -120,6 +97,7 @@ class feature_extractor:
         self.feature_number_limit = limit
         self.treeforassert = False
 
+    # calculate the solving time label for data after adjustment(average), 0 for the lack of data
     def cal_training_label(self):
         solver_list = ["msat", "cvc4", "yices", "btor", "z3"]
         if isinstance(self.script_info.solving_time_dic, dict):
@@ -131,10 +109,7 @@ class feature_extractor:
             time_list = self.script_info.solving_time_dic
         if time_list:
             time_list = [float(x) for x in time_list]
-            if max(time_list) > 320:
-                time_list = time_list[:-1]
-            #     self.adjust_time = max(time_list)
-            # else:
+            # self.adjust_time = max(time_list)
             self.adjust_time = sum(time_list) / len(time_list)
         else:
             self.adjust_time = 0
@@ -147,7 +122,7 @@ class feature_extractor:
         data = self.script_info.script
         self.cal_training_label()
 
-        assertions = self.handle_difficult_variable_defination(data)
+        assertions = self.handle_variable_defination(data)
 
         # parse define-fun with pysmt parser
         # to do: handle more reserved word parser in SMT-LIB
@@ -166,7 +141,7 @@ class feature_extractor:
         #     self.construct_define(define_list)
 
         try:
-            # parse assertion stack into expression trees
+            # parse assertion stack into abstract trees
             self.assertions_to_feature_list(assertions)
             # merging sub tree: bottom_up_merging or accumulation
             self.accumulation()
@@ -182,7 +157,8 @@ class feature_extractor:
             self.logic_tree = vartree('unknown', None, None, None)
             # raise e
 
-    def handle_difficult_variable_defination(self, data):
+    # record variables defined with reserve word "declare-fun", "declare-sort", ..., for later variable replacement
+    def handle_variable_defination(self, data):
         last_reserved_word = None
         left_count = 0
         # replace variable with general symbol
@@ -396,6 +372,8 @@ class feature_extractor:
             #     else:
             #         self.parse_angr_smt(data_line)
 
+    # parse a wider SMT script(mainly on QF_ABV, QF_URA), second version, abandoned after switching to pysmt parse, if
+    # pysmt parse failed, you may use this instead
     def parse_smt_comp(self, assertion):
         data_list = assertion.split(" ")
         current_ind = 0
@@ -527,6 +505,7 @@ class feature_extractor:
             return False
         return True
 
+    # count the operators and variables of a piece of assertion of SMT, str->[int]*150
     def count_feature(self, assertion):
         for var_name in self.val_list:
             if " " in var_name:
@@ -557,6 +536,7 @@ class feature_extractor:
         # self.feature_list.append(vartree(feature))
         return feature
 
+    # parse angr SMT script(mainly on QF_BV), first version, abandoned after switching to pysmt parse
     def parse_angr_smt(self, data_line):
         for var_name in self.val_list:
             if " " in var_name:
@@ -698,7 +678,6 @@ def copy(tree):
         ret.depth = tree.depth
         ret.compress_depth = tree.compress_depth
     return ret
-
 
 def vartree(val,left= None,mid= None,right= None):
     if left == None and isinstance(val, Tree):

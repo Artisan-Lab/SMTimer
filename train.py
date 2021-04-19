@@ -26,7 +26,6 @@ from dgl_treelstm.metric import Metrics
 from dgl_treelstm.util import extract_root
 from preprocessing import dgl_dataset,Tree_Dataset,Vocab,Constants,Vector_Dataset
 import torch.nn.utils.rnn as rnn_utils
-from sklearn.metrics import roc_curve
 
 SSTBatch = collections.namedtuple('SSTBatch', ['graph', 'wordid', 'label', 'filename'])
 FTBatch = collections.namedtuple('FTBatch', ['feature', 'label', 'filename', 'data_len'])
@@ -47,18 +46,19 @@ def batcher(device):
 
 def pad_feature_batcher(device, time_selection="origin", task="regression", threshold=60):
     def batcher_dev(batch):
-        # x = th.Tensor([item.logic_tree for item in batch])
-        x = [th.Tensor(item.logic_tree) for item in batch]
+        # x = th.Tensor([item.feature for item in batch])
+        x = [th.Tensor(item.feature) for item in batch]
         data_length = [len(sq) for sq in x]
         if time_selection == "origin":
             y = th.Tensor([item.origin_time for item in batch])
-            # y = th.Tensor([item.origin_time / 300 for item in batch])
         else:
-            # y = th.Tensor([item.adjust_time / 300 for item in batch])
             y = th.Tensor([item.adjust_time for item in batch])
         if task != "regression":
             y = th.LongTensor([1 if item > threshold else 0 for item in y])
-        x = rnn_utils.pad_sequence(x, batch_first=True)
+        try:
+            x = rnn_utils.pad_sequence(x, batch_first=True)
+        except:
+            print("error")
         return FTBatch(feature=x,
                         label=y,
                         filename=[item.filename for item in batch],
@@ -68,7 +68,7 @@ def pad_feature_batcher(device, time_selection="origin", task="regression", thre
 def feature_batcher(device, time_selection="origin", task="regression", threshold=60):
     def batcher_dev(batch):
         x = th.Tensor([item.logic_tree for item in batch])
-        # x = [th.Tensor(item.logic_tree) for item in batch]
+        # x = [th.Tensor(item.feature) for item in batch]
         # data_length = [len(sq) for sq in x]
         if time_selection == "origin":
             y = th.Tensor([item.origin_time for item in batch])
@@ -84,7 +84,6 @@ def feature_batcher(device, time_selection="origin", task="regression", threshol
     return batcher_dev
 
 def main(args):
-    parallel = True
     np.random.seed(args.seed)
     th.manual_seed(args.seed)
     th.cuda.manual_seed(args.seed)
@@ -96,12 +95,12 @@ def main(args):
     if cuda:
         th.cuda.set_device(args.gpu)
 
-    smt_vocab_file = './data/gnucore/smt.vocab'
+    smt_vocab_file = 'smt.vocab'
     smt_vocab = Vocab(filename=smt_vocab_file,
                       data=[Constants.UNK_WORD])
 
     try:
-        pretrained_emb = th.load('./data/gnucore/smt.pth')
+        pretrained_emb = th.load('smt.pth')
     except:
         pretrained_emb = th.zeros(smt_vocab.size(), 150)
         for word in smt_vocab.labelToIdx.keys():
@@ -123,8 +122,6 @@ def main(args):
                          args.attention,
                          cell_type='childsum' if args.child_sum else 'childsum',
                          pretrained_emb = pretrained_emb)
-    # if parallel:
-    #     model = th.nn.DataParallel(model, device_ids=[0, 1])
     model.to(device)
     print(model)
 
@@ -152,106 +149,6 @@ def main(args):
 
     if not args.single_test:
         train_dataset, test_dataset = load_dataset(args)
-    # test
-    # elif args.single_test:
-    #     input = os.path.join('./data', args.data_source)
-    #     # logger = getlogger()
-    #     start = time.time()
-    #     if True:
-    #         if os.path.isdir(input):
-    #             smt_scripts = []
-    #             for root, dirs, files in os.walk(input):
-    #                 for file in files:
-    #                     # print(file)
-    #                     with open(os.path.join(input, file), "r") as f:
-    #                         data = f.read()
-    #                         try:
-    #                             data = json.loads(data)["smt_script"]
-    #                         except:
-    #                             pass
-    #                         smt_scripts.append(data)
-    #                         if len(smt_scripts) > 6000:
-    #                             break
-    #         elif os.path.isfile(input):
-    #             with open(input, "r") as f:
-    #                 data = f.read()
-    #             smt_scripts = data.split("\n\n")
-    #
-    #         dl = []
-    #         tl = []
-    #         bigcount = 0
-    #         smallcount = 0
-    #         for script in smt_scripts:
-    #             data, atime = process_data(script)
-    #             if atime > 1:
-    #             # if z3fun(data, None, 1000) == "unknown":
-    #                 dl.append(data)
-    #                 tl.append(atime)
-    #                 bigcount += atime
-    #             else:
-    #                 # z3fun(data, None)
-    #                 smallcount += atime
-    #         end = time.time()
-    #         print("solve time",end - start)
-    #         dataset = Dataset().generate_feature_dataset(dl)
-    #         print("> 10 num", len(dl))
-    #         print("< 10", smallcount)
-    #         print("> 10", bigcount)
-    #     else:
-    #         dataset = load_file(args)
-    #     dataset = dgl_dataset(dataset, pretrained_emb, smt_vocab, task, args.time_selection)
-    #     test_loader = DataLoader(dataset=dataset,
-    #                              batch_size=1, collate_fn=batcher(device), shuffle=False, num_workers=0)
-    #
-    #     checkpoint = th.load('checkpoints/{}.pkl'.format(args.load_file))
-    #     model.load_state_dict(checkpoint['model'])
-    #     start = end
-    #     error = 0
-    #     save = 0
-    #     t1 = 250
-    #     model.eval()
-    #     for step, batch in enumerate(test_loader):
-    #         g = batch.graph
-    #         n = g.number_of_nodes()
-    #         with th.no_grad():
-    #             h = th.zeros((n, args.h_size)).to(device)
-    #             c = th.zeros((n, args.h_size)).to(device)
-    #             logits = model(batch, h, c)
-    #         batch_label, logits = extract_root(batch, device, logits)
-    #         if args.regression:
-    #             logits = logits.reshape(-1)
-    #             pred = logits
-    #             skip = (pred >= t1)
-    #         else:
-    #             pred = th.argmax(F.log_softmax(logits), 1)
-    #             skip = pred == 1
-    #         if not skip:
-    #             if tl[step] > t1:
-    #                 error += 1
-    #             # data = dl[step]
-    #             # print("sat")
-    #             pass
-    #             # print(step, pred)
-    #             # data = process_data(smt_scripts[step])
-    #             # z3fun(data, batch.filename)
-    #         else:
-    #             if tl[step] < 10:
-    #                 error += 500
-    #                 save += tl[step] * 500
-    #             elif tl[step] < t1:
-    #                 error += 1
-    #                 save += tl[step]
-    #             else:
-    #                 save += tl[step]
-    #             pass
-    #             # print("skip")
-    #     end = time.time()
-    #     print("error", error)
-    #     print("save time", save)
-    #     print(end - start)
-    #     return
-
-    # return
 
     # test
     if args.load:
@@ -262,11 +159,9 @@ def main(args):
         # dataset = dgl_dataset(train_dataset + test_dataset, smt_vocab, task)
 
         qd = Tree_Dataset()
-        qd.qt_list = test_dataset + train_dataset
-        test_dataset = qd.qt_list
-        test_filename = set([i.filename for i in qd.qt_list])
-        # test_filename = ["echo", "ginstall", "expr", "tail", "seq", "split", "test", "yes", "chgrp", "date", "expand",
-        #                  "head", "nohup", "printf", "sha1sum", "stat", "timeout", "uniq", "nice", "pr"]
+        qd.fs_list = test_dataset + train_dataset
+        test_dataset = qd.fs_list
+        test_filename = set([i.filename for i in qd.fs_list])
         test_filename = checkpoint["args"].test_filename
         # total_mean = np.mean(np.array([x.feature for x in train_dataset]), axis=0)
         # total_std = np.std(np.array([x.feature for x in train_dataset]), axis=0)
@@ -280,7 +175,7 @@ def main(args):
             _, test_dataset = qd.split_with_filename([fn])
         # if True:
         #     _,test_dataset = qd.split_with_filename(test_filename)
-            # test_dataset = qd.qt_list
+            # test_dataset = qd.fs_list
             # program_std = np.std(np.array([x.feature for x in test_dataset]), axis=0)
             # program_mean = np.mean(np.array([x.feature for x in test_dataset]), axis=0)
             # program_time_std = np.std(np.array([x.adjust_time for x in test_dataset]), axis=0)
@@ -381,34 +276,6 @@ def main(args):
             results = list(zip(pred_tensor, label_tensor))
             # print(results)
 
-            # def modify_threshold(result, truth):
-            #     threshold = 250
-            #     time_out_setting = 200
-            #     time_record = {}
-            #     for ind, _ in enumerate(result):
-            #         if result > threshold or truth > time_out_setting:
-            #             time_record["timeout"].append(result)
-            #         else:
-            #             time_record["solvable"].append(result)
-            #         if result < threshold and truth > time_out_setting:
-            #             timeout_list = np.array(time_record["timeout"])
-            #             solvable_list = time_record["solvable"]
-            #             try:
-            #                 solvable_limit = max(np.percentile(solvable_list, 95), np.mean(solvable_list), 60)
-            #                 suitable_min_timeout = min(filter(lambda x: x > solvable_limit, timeout_list))
-            #                 if isinstance(suitable_min_timeout, th.Tensor):
-            #                     suitable_min_timeout = suitable_min_timeout.item()
-            #                 max_solvable = max(filter(lambda x: x < suitable_min_timeout, time_record["solvable"]))
-            #                 if isinstance(max_solvable, th.Tensor):
-            #                     max_solvable = max_solvable.item()
-            #                 threshold = max(suitable_min_timeout - 1, (suitable_min_timeout + max_solvable) / 2,
-            #                                      threshold - 50)
-            #             except (IndexError, ValueError):
-            #                 pass
-            #             print("decrease threshold to ", str(threshold))
-            #     return
-
-
             checkpoint = {
                 'model': model.state_dict(),
                 'optim': optimizer,
@@ -419,43 +286,16 @@ def main(args):
             }
             loss_list.append(total_loss / len(dataset))
             print("------------------------------------------")
-        # loss_l = np.array([8915.2061] + [x.item() for x in loss_list]).tolist()
-        # data = {"filename": ['total'] + list(test_filename), "array": output.tolist(), 'loss': loss_l}
-        # with open("feature_array_loss.json", 'w') as f:
-        #     json.dump(data, f)
         # print(metric_dic)
         # print(results)
-        th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([args.input, 'evaluation',
+        dir = args.input[5:]
+        th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([dir, 'evaluation',
                None if args.regression else "c" , None if args.cross_index < 0 else str(args.cross_index + 1)])))
         return
 
-    # find high quality test dataset
-#     qd = Dataset()
-#     qd.qt_list = train_dataset + test_dataset
-#     test_filename = ["uname","shuf","ln","du","runcon","ginstall","uniq","unlink","mkfifo","ls","cp","who","pathchk","mktemp","vdir","shred",
-# "chcon","nice","tty","comm","printf","touch","env","chroot","sleep","rmdir","od","sha512sum","factor","sha256sum",
-# "id","tr","arch","sha224sum","pinky","users","date","md5sum","dirname","paste","readlink","dircolors","nl","sha1sum",
-# "cksum","base64","fold","tail","wc","fmt","su","link","csplit","dir","unexpand","yes","df","join","hostname","head",
-# "ptx","expand","basename","stty","mv","mknod","pwd","split","sum","cut","tee","rm","uptime","setuidgid","tsort","mkdir",
-# "chown","pr","seq","chmod","tac","stat","sort","sha384sum","chgrp","cat"]
-#     for i in range(10):
-#         if i / 10 == 0:
-#             random.shuffle(test_filename)
-#         with th.no_grad():
-#             for param in trainer.model.parameters():
-#                 param.normal_(0, 0.4)
-#         trainer.epoch = 0
-#         slice = i % 10
-#         train_dataset, test_dataset = qd.split_with_filename(test_filename[10 * slice: 10 * (slice + 1)])
-#         train_op = np.sum(np.array([x.feature for x in train_dataset]), axis=0)
-#         test_op = np.sum(np.array([x.feature for x in test_dataset]), axis=0)
-
     if args.model == "tree-lstm":
         trainer = Trainer(args, model, criterion, optimizer, device, metric, metric_name)
-        datalen = int(len(train_dataset) * 9 / 10)
         random.shuffle(train_dataset)
-        # dev_dataset = dgl_dataset(train_dataset[datalen:], pretrained_emb, smt_vocab, task, args.time_selection)
-        # train_dataset = dgl_dataset(train_dataset[:datalen], pretrained_emb, smt_vocab, task, args.time_selection)
         train_dataset = dgl_dataset(train_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
         test_dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
 
@@ -464,29 +304,16 @@ def main(args):
                                   collate_fn=batcher(device),
                                   shuffle=True,
                                   num_workers=0)
-        # dev_loader = DataLoader(dataset=dev_dataset,
-        #                          batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
         test_loader = DataLoader(dataset=test_dataset,
                                  batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
     elif args.model == "lstm" or args.model == "rnn":
         trainer = LSTM_Trainer(args, model, criterion, optimizer, device, metric, metric_name)
-        datalen = int(len(train_dataset) * 9 / 10)
-        # random.shuffle(train_dataset)
-        # dev_dataset = train_dataset[datalen:]
-        # train_dataset = train_dataset[:datalen]
-        # pos = [i.adjust_time > args.threshold for i in train_dataset]
-        # neg_num = len(train_dataset) - len(pos)
-        # train_dataset.append(pos * (neg_num // len(pos) - 1))
 
         train_loader = DataLoader(dataset=train_dataset,
                                   batch_size=args.batch_size,
                                   collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold),
                                   shuffle=True,
                                   num_workers=0)
-        # dev_loader = DataLoader(dataset=dev_dataset,
-        #                          batch_size=100,
-        #                          collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold),
-        #                          shuffle=False, num_workers=0)
         test_loader = DataLoader(dataset=test_dataset,
                                  batch_size=100, collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold), shuffle=False, num_workers=0)
     else:
@@ -628,29 +455,13 @@ def main(args):
     print("Epoch {:05d} | Test {:s} {:.4f}".format(
         best_epoch, metric_name, best_dev_metric))
 
-    # model.load_state_dict(checkpoint['model'])
-    # pred_tensor, label_tensor = trainer.pred_tensor, trainer.label_tensor
-    # batch_label = label_tensor.cpu().numpy()
-    # batch_label[batch_label < 300] = 0
-    # batch_label[batch_label >= 300] = 1
-    # fpr, tpr, thresholds = roc_curve(batch_label, pred_tensor.cpu().numpy())
-    # pyplot.plot(fpr, tpr, lw=1, label="lstm")
-    #
-    # pyplot.xlim([0.00, 1.0])
-    # pyplot.ylim([0.00, 1.0])
-    # pyplot.xlabel("False Positive Rate")
-    # pyplot.ylabel("True Positive Rate")
-    # pyplot.title("ROC")
-    # pyplot.legend(loc="lower right")
-    # pyplot.savefig(r"./ROC.png")
-
     # total_result, total_loss = trainer.test(test_loader)
     #
     # print("==> Epoch {:05d} | Test Loss {:.4f} | {:s} {:.4f}".format(
     #     epoch, total_loss / len(test_dataset), metric_name, total_result / len(test_dataset)))
 
 def load_file(args):
-    dataset = Tree_Dataset().generate_feature_dataset(os.path.join('./data', args.data_source))
+    dataset = Tree_Dataset().generate_feature_dataset(args.data_source)
     return dataset
 
 
@@ -661,53 +472,11 @@ def load_dataset(args):
     else:
         dataset_type = Vector_Dataset
         feature_limit = 50
-    output_dir = os.path.join('./data', args.input)
+    output_dir = args.input
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     train_file = os.path.join(output_dir, 'gnucore_train')
     test_file = os.path.join(output_dir, 'gnucore_test')
-    # if "gnucore/" in train_file:
-    #     test_filename = ["echo", "ginstall", "expr", "tail", "seq", "split", "test", "yes", "chgrp", "date", "expand",
-    #                  "head", "nohup", "printf", "sha1sum", "stat", "timeout", "uniq", "nice", "pr"]
-    #     # test_filename = ["arch", "chgrp", "csplit", "dirname", "fmt", "id", "md5sum", "mv", "pinky", "readlink", "seq",
-    #     #                  "sleep", "tac", "tsort", "uptime", "base64", "chmod", "cut", "du", "fold", "join", "mkdir",
-    #     #                  "nice", "pr", "rm"]
-    #     # test_filename = ["setuidgid", "sort", "tail", "tty", "users", "basename", "chroot", "date", "expand", "ginstall",
-    #     #                  "link", "mkfifo", "nl", "printenv", "rmdir", "sha1sum", "split", "test", "uname", "vdir",
-    #     #                  "cat", "comm", "df", "expr"]
-    #     test_filename = ["head", "ln", "mknod", "od", "printf", "runcon", "shred", "stat", "touch", "unexpand", "wc",
-    #                      "chcon", "cp", "dir", "factor", "hostname", "ls", "mktemp", "pathchk", "ptx", "shuf", "su",
-    #                      "tr", "unlink", "who"]
-    # elif "klee" in train_file:
-    #     test_filename = ['split', 'cp', 'base64', 'fmt', 'vdir', 'csplit', 'tr', 'join', 'shred']
-    #     test_filename = ['tail', 'nice', 'sleep', 'ginstall', 'ls', 'du', 'expr', 'date', 'stat', 'df']
-    #     test_filename = ['factor', 'chgrp', 'fold', 'head', 'nl', 'expand', 'setuidgid', 'mv', 'dir', 'tac']
-    # elif "busybox" in train_file:
-    #     # test_filename = ['raidautorun', 'smemcap', 'klogd', 'fstrim', 'cksum', 'killall5', 'mkswap', 'mt', 'mesg',
-    #     #                  'chroot', 'fbsplash', 'insmod', 'nice', 'ionice', 'mkfs.vfat', 'stty', 'volname', 'sulogin']
-    #     test_filename = ["adjtimex", "conspy", "fgconsole", "init", "linux", "makemime", "mv", "rmdir", "setconsole",
-    #                      "swapon", "uevent", "arp", "devmem", "ipcalc", "loadkmap", "netstat", "route","setpriv", "sync",
-    #                      "umount", "bootchartd", "dmesg", "fsync", "ipneigh", "login", "mkdir", "rpm","setserial",
-    #                      "sysctl", "usleep", "cat", "dnsdomainname", "getopt", "iprule", "logread", "mkdosfs"]
-    #     # test_filename = ["nohup", "rpm2cpio", "start-stop-daemon", "timeout", "watchdog", "chattr", "dumpkmap", "gnuzip",
-    #     #                  "kbd_mode", "losetup", "mkfs.ext", "ping", "runlevel", "stat", "touch", "zcat", "chmod",
-    #     #                  "hostname", "kill", "lsattr", "printenv", "run-parts", "udhcpc", "fatattr", "ifconfig", "false",
-    #     #                  "lsmod", "readahead", "setarch", "swapoff", "udhcpd"]
-    # elif "smt-comp" in train_file:
-    #     test_filename = ['core', 'app5', 'app2', 'catchconv', 'gulwani-pldi08', 'bmc-bv', 'app10', 'app8', 'pspace',
-    #                      'RWS', 'fft', 'tcas', 'ecc', 'HamiltonianPath', 'ConnectedDominatingSet',
-    #                      '20170501-Heizmann-UltimateAutomizer', 'GeneralizedSlitherlink', '2019-Mann', 'mcm', 'zebra',
-    #                      'uclid', 'samba', 'wget']
-    #     test_filename = ['cvs', 'MazeGeneration', 'stp', 'float', '20190311-bv-term-small-rw-Noetzli',
-    #                      'GraphPartitioning', 'Sage2', 'app9', 'tacas07', '2017-BuchwaldFried',
-    #                      'WeightBoundedDominatingSet', 'app7', 'log-slicing', 'Commute', 'brummayerbiere2', 'VS3',
-    #                      '2018-Mann', 'bench', 'Distrib', 'lfsr', 'brummayerbiere', 'openldap', 'inn']
-    #     test_filename = ['galois', 'rubik', '20170531-Hansen-Check', 'ChannelRouting', 'Booth', 'app6', 'app1',
-    #                      '2018-Goel-hwbench', 'bmc-bv-svcomp14', '20190429-UltimateAutomizerSvcomp2019', 'check2',
-    #                      'brummayerbiere4', 'crafted', 'calypto', 'challenge', 'app12', 'simple', 'uum', 'pipe',
-    #                      'xinetd', 'dwp', 'KnightTour', 'brummayerbiere3']
-    # else:
-    #     test_filename = None
     if args.cross_index < 0:
         fn_index = 0
     else:
@@ -718,17 +487,18 @@ def load_dataset(args):
     if os.path.isfile(train_file):
         train_dataset = th.load(train_file)
         try:
-            if os.path.exists(train_file + "_1"):
-                train_dataset = train_dataset.extend(th.load(train_file + "_1"))
+            ind = 0
+            while(os.path.exists(train_file + str(ind))):
+                train_dataset = train_dataset.extend(th.load(train_file + str(ind)))
         except IOError:
             pass
         if os.path.isfile(test_file):
             test_dataset = th.load(test_file)
         else:
             qd = dataset_type(feature_number_limit=feature_limit)
-            qd.qt_list = train_dataset
+            qd.fs_list = train_dataset
             dataset = train_dataset
-            # qd.qt_list = list(filter(lambda x:x.adjust_time > 1, qd.qt_list))
+            # qd.fs_list = list(filter(lambda x:x.adjust_time > 1, qd.fs_list))
             if "smt-comp" in train_file:
                 if args.random_test:
                     test_filename = list(set([x.filename for x in train_dataset]))
@@ -737,7 +507,7 @@ def load_dataset(args):
                     test_filename = test_filename[:l]
 
                 # if "smt-comp" in train_file and not args.load:
-                #     qd.qt_list = list(filter(lambda x:x.adjust_time > 1, qd.qt_list))
+                #     qd.fs_list = list(filter(lambda x:x.adjust_time > 1, qd.fs_list))
                 print("select program:", test_filename)
                 test_filename1 = [x.filename for x in train_dataset]
                 test_filename = list(filter(lambda x:x.split("_")[0] in test_filename, test_filename1))
@@ -753,7 +523,7 @@ def load_dataset(args):
     else:
         treeforassert = "tree+feature" in args.input
         qd = dataset_type(feature_number_limit=feature_limit, treeforassert=treeforassert)
-        dataset = qd.generate_feature_dataset(os.path.join('./data', args.data_source), args.time_selection)
+        dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
         train_dataset, test_dataset = qd.split_with_filename(test_filename)
 
     if args.augment:
@@ -799,8 +569,8 @@ def parse_arg():
     parser.add_argument('--weight-decay', type=float, default=1e-3)
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--num_classes', type=float, default=2)
-    parser.add_argument('--data_source', default='gnucore/script_dataset/training')
-    parser.add_argument('--input', default='gnucore/training')
+    parser.add_argument('--data_source', default='data/gnucore/script_dataset/training')
+    parser.add_argument('--input', default='data/gnucore/training')
     parser.add_argument('--regression', action='store_false')
     parser.add_argument('--attention', action='store_true')
     parser.add_argument('--load', action='store_true')
@@ -810,7 +580,7 @@ def parse_arg():
     parser.add_argument('--augment', action='store_true')
     parser.add_argument('--augment_path', default='data/gnucore/augment/crosscombine')
     parser.add_argument('--random_test', action='store_true')
-    parser.add_argument('--threshold', type=int, default=60)
+    parser.add_argument('--threshold', type=int, default=200)
     parser.add_argument('--cross_index', type=int, default=-1)
     args = parser.parse_args()
     print(args)
