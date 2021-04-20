@@ -20,12 +20,25 @@ class Trainer(object):
         self.metric_name = metric_name
         self.pred_tensor, self.label_tensor = None, None
 
+    def cal_metrics_result(self, metric_result, dataset_len):
+        if self.args.regression:
+            result = metric_result / dataset_len
+        else:
+            confusion_matrix = metric_result
+            precision = (confusion_matrix.diag() / confusion_matrix.sum(1))[1]
+            recall = (confusion_matrix.diag() / confusion_matrix.sum(0))[1]
+            result = 2 * precision * recall / (precision + recall)
+            if th.isnan(result):
+                result = 0
+        return result
+
     # helper function for training
     def train(self, train_loader):
         self.model.train()
         total_loss = 0
         total_result = 0
         dur = []
+        dataset_len = len(train_loader.dataset)
         for step, batch in enumerate(train_loader):
             g = batch.graph
             n = g.number_of_nodes()
@@ -58,8 +71,9 @@ class Trainer(object):
                 # if self.epoch % 10 == 9:
                 #     print(th.transpose(th.cat((pred, batch_label)).reshape(2,-1), 0, 1))
                 print("Epoch {:05d} | Step {:05d} | Loss {:.4f} | {:s} {:.4f} | Time(s) {:.4f}".format(
-                    self.epoch, step, loss.item(), self.metric_name, metric_result / g.batch_size, np.mean(dur)))
+                    self.epoch, step, loss.item(), self.metric_name, self.cal_metrics_result(metric_result, g.batch_size), np.mean(dur)))
         self.epoch += 1
+        total_result = self.cal_metrics_result(total_result, dataset_len)
         return total_result, total_loss
 
     # helper function for testing
@@ -70,6 +84,7 @@ class Trainer(object):
         total_result = 0
         total_loss = 0
         self.model.eval()
+        dataset_len = len(test_loader.dataset)
         for step, batch in enumerate(test_loader):
             g = batch.graph
             n = g.number_of_nodes()
@@ -98,6 +113,7 @@ class Trainer(object):
             # if self.epoch % 10 == 0 and step == 0:
             #     print(th.transpose(th.cat((pred, batch_label)).reshape(2,-1), 0, 1))
         self.pred_tensor, self.label_tensor = pred_tensor, label_tensor
+        total_result = self.cal_metrics_result(total_result, dataset_len)
         return total_result, total_loss
 
 
@@ -114,11 +130,24 @@ class LSTM_Trainer(object):
         self.metric_name = metric_name
         self.pred_tensor, self.label_tensor = None, None
 
+    def cal_metrics_result(self, metric_result, dataset_len):
+        if self.args.regression:
+            result = metric_result / dataset_len
+        else:
+            confusion_matrix = metric_result
+            precision = (confusion_matrix.diag() / confusion_matrix.sum(1))[1]
+            recall = (confusion_matrix.diag() / confusion_matrix.sum(0))[1]
+            result = 2 * precision * recall / (precision + recall)
+            if th.isnan(result):
+                result = 0
+        return result
+
     # helper function for training
     def train(self, train_loader):
         total_loss = 0
         total_result = 0
         self.model.train()
+        dataset_len = len(train_loader.dataset)
         for step, batch in enumerate(train_loader):
             batch_feature = batch.feature.to(self.device)
             batch_label = batch.label.to(self.device)
@@ -148,6 +177,7 @@ class LSTM_Trainer(object):
             total_result += metric_result
 
         self.epoch += 1
+        total_result = self.cal_metrics_result(total_result, dataset_len)
         return total_result, total_loss
 
     # helper function for testing
@@ -157,6 +187,7 @@ class LSTM_Trainer(object):
         total_result = 0
         total_loss = 0
         self.model.eval()
+        dataset_len = len(test_loader.dataset)
         for step, batch in enumerate(test_loader):
             batch_feature = batch.feature.to(self.device)
             batch_label = batch.label.to(self.device)
@@ -189,4 +220,5 @@ class LSTM_Trainer(object):
             # if self.epoch % 10 == 0 and step == 0:
             #     print(th.transpose(th.cat((pred, batch_label)).reshape(2,-1), 0, 1))
         self.pred_tensor, self.label_tensor = pred_tensor, label_tensor
+        total_result = self.cal_metrics_result(total_result, dataset_len)
         return total_result, total_loss

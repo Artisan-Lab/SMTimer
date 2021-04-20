@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader
 import Constants
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.nn_models import *
-from preprocessing import dgl_dataset, Vocab
+from preprocessing import Vocab
 from preprocessing import varTree
-from dgl_treelstm.metric import *
+from dgl_treelstm.dgl_dataset import dgl_dataset
 from check_time import process_data
 from train import pad_feature_batcher, batcher
 from preprocessing.Vector_Dataset import Vector_Dataset
@@ -25,6 +25,7 @@ from dataset_filename_seperation import get_dataset_seperation
 
 warnings.filterwarnings('ignore')
 
+# simulation for different models
 class Simulation:
     def __init__(self, model, threshold=200):
         self.model = model
@@ -233,6 +234,7 @@ class TreeLSTM_Simulation(Simulation):
         skip = predict_result[0] > self.threshold
         return predict_result[0], skip
 
+# result saving structure
 class Evalution:
     def __init__(self, pred=np.array([]), truth=np.array([])):
         self.pred = self.get_numpy(pred)
@@ -258,15 +260,18 @@ class Evalution:
         f1 = f1_score(self.pred, self.truth)
         return acc, pre, rec, f1
 
+# time calculation
 class Time_Section:
     def __init__(self):
         self.origin_time = 0
         self.predict_time = 0
+        # overall time for simulation comparision(without solving phase 1 which manually added)
         self.final_time = 0
         self.preprocessing_time = 0
 
     def update(self, predict_result, solve_time):
         self.origin_time += solve_time
+        self.final_time += 1
         if not predict_result:
             self.final_time += solve_time
 
@@ -278,19 +283,19 @@ class Time_Section:
 def load_data(model, input):
     dataset = None
     if model == "Tree-LSTM":
-        dataset = Tree_Dataset(treeforassert=True)
+        dataset = Tree_Dataset(treeforassert=True, feature_number_limit=100)
     elif model == "lstm":
         dataset = Vector_Dataset(feature_number_limit=50)
     elif model == "KNN":
         dataset = Vector_Dataset(feature_number_limit=2)
     else:
-        dataset = Tree_Dataset()
+        dataset = Tree_Dataset(feature_number_limit=100)
     if "smt-comp" in input:
-        dataset.qt_list = th.load(input)
+        dataset.fs_list = th.load(input)
         test_filename = "mcm"
-        test_filename1 = [x.filename for x in dataset.qt_list]
+        test_filename1 = [x.filename for x in dataset.fs_list]
         test_file = list(filter(lambda x:x.split("_")[0] == test_filename, test_filename1))
-        dataset.qt_list = dataset.split_with_filename(test_file)[1]
+        dataset.fs_list = dataset.split_with_filename(test_file)[1]
         input = input + "/" + test_filename
     else:
         if "klee" in input:
@@ -302,8 +307,9 @@ def load_data(model, input):
                 th.save(dataset, data_input)
         else:
             dataset.generate_feature_dataset(input)
-    return dataset.qt_list, input
+    return dataset.fs_list, input
 
+# mainly for cross dataset prediction for adaptive KNN model
 def identify_dataset(input, dataset):
     for i in ["busybox", "smt-comp", "klee"]:
         if i in input:
@@ -318,6 +324,7 @@ def identify_dataset(input, dataset):
         return "klee"
     return "gnucore"
 
+# our baseline result, not usable without result from PCC
 def make_PCC_output(input, output_result):
     if os.path.exists(input):
         with open(input, "r") as f:
@@ -401,6 +408,7 @@ def make_PCC_output(input, output_result):
                 with open("simulation_result/output.json", "w")as f:
                     f.write(output)
 
+# output the result for a single program
 def make_output(dsn1, dsn2, input, simulation, result, time_section, output_result=True, plot_picture=True):
     pred_truth_tuple = list(zip(range(len(result.pred)), result.pred.tolist(), result.truth.tolist(), result.classify_result))
     pred_truth_tuple = list(filter(lambda a:a[3] != (a[2] > simulation.time_out_setting), pred_truth_tuple))
@@ -427,7 +435,7 @@ def make_output(dsn1, dsn2, input, simulation, result, time_section, output_resu
     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
     if simulation.model_type != 'KNN':
         fpr, tpr, thresholds = roc_curve(result.truth > simulation.time_out_setting, result.pred)
-        pyplot.plot(fpr, tpr, lw=1, label="lstm")
+        pyplot.plot(fpr, tpr, lw=1, label=simulation.model_type)
         # print(fpr, tpr, thresholds)
         pyplot.xlim([0.00, 1.0])
         pyplot.ylim([0.00, 1.0])
@@ -454,6 +462,8 @@ def make_output(dsn1, dsn2, input, simulation, result, time_section, output_resu
             with open("simulation_result/output.json", "w")as f:
                 f.write(output)
 
+# automatic partition selection since we use cross validation to generate three piece of result for a model
+# used for the hardcoded switch
 def choose_input(dataset, input, load_path):
     fn = get_dataset_seperation(dataset)
     f1, f2, f3 = fn[0], fn[1], fn[2]
@@ -472,7 +482,10 @@ def choose_input(dataset, input, load_path):
         load_path = ""
     return load_path
 
-
+# simulate the solving in real order, in the simulation, the predicted timeout solving would be skipped,
+# the time different is taken as the time saved.
+# the simulation may not reflect the real situation since wrongly skip path means the change of path selection, but if
+# you give it a low priority, then these paths are just deferred, you may execute more paths in the same time budget.
 def simulation_for_single_program(input, input_index):
     s = time.time()
     if args.classification:
@@ -501,6 +514,8 @@ def simulation_for_single_program(input, input_index):
         simulation.time_out_setting = 200
     else:
         simulation.time_out_setting = 100
+    if input == None:
+        input = input_list[int(input_index)]
     serial_data, test_input = load_data(model_name, input)
     time_section = Time_Section()
     result = Evalution()
@@ -533,17 +548,19 @@ def simulation_for_single_program(input, input_index):
     time_section.add_prediction_time(e - s1, s1 - s)
     make_output(dsn1, dsn2, input, simulation, result, time_section, True, True)
 
-
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_name', default="KNN")
-parser.add_argument('--input', default=None)
-parser.add_argument('--input_index', type=int, default=8)
-parser.add_argument('--time_selection', default='origin')
-parser.add_argument('--model', default='tree-lstm')
-parser.add_argument('--batch-size', type=int, default=64)
-parser.add_argument('--classification', action='store_true')
-parser.add_argument('--adapt', action='store_true')
+parser.add_argument('--model_name', default="KNN", help="model type, allow 'lstm', 'tree-lstm', 'KNN'")
+parser.add_argument('--test_directory', default=None, help="the script saving directory for test program")
+parser.add_argument('--load_file', default=None, help="the path to model for evaluation")
+parser.add_argument('--input_index', type=int, default=8, help="short-way for switch evaluation model,"
+                            "hardcoded, not recommanded to change for use")
+parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
+     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+parser.add_argument('--classification', action='store_true', help="not used for time prediction(regression), "
+    "use for timeout constraint classification(classification)")
+parser.add_argument('--adapt', action='store_true', help="an adaptive time threshold for neural network models "
+                "used for regression, because the predicted timeout threshold varies for different programs")
+parser.add_argument('--batch-size', type=int, default=64, help="some lstm setting in case you change the model")
 parser.add_argument('--x-size', type=int, default=300)
 parser.add_argument('--h-size', type=int, default=150)
 parser.add_argument('--epochs', type=int, default=40)
@@ -553,6 +570,7 @@ print(args)
 
 model_name = args.model_name
 input_index = args.input_index
+# hardcoded short-way for switch evaluation model
 input_list = ["checkpoints/simulation/g_serial_pad_feature_l_z_r_200.pkl",#0
               "checkpoints/simulation/g_serial_tree_feature_t_z_r_200.pkl",#1
               "checkpoints/simulation/g_tree+feature_t_z_r_200.pkl",#2
@@ -561,30 +579,35 @@ input_list = ["checkpoints/simulation/g_serial_pad_feature_l_z_r_200.pkl",#0
               "checkpoints/simulation/b_tree+feature_t_z_r_200.pkl",#5
               "checkpoints/simulation/s_serial_pad_feature_l_z_r_200.pkl",#6
               "checkpoints/simulation/s_tree_feature_t_z_r_200.pkl",#7
-              "data/gnucore/fv2_serial/gnucore_train",#8
-              "data/busybox/fv2_serial/gnucore_train",#9
-              "data/smt-comp/fv2_serial/gnucore_train",#10
-              "data/klee/fv2_serial/gnucore_train",#11
+              "data/gnucore/fv2_serial/train",#8
+              "data/busybox/fv2_serial/train",#9
+              "data/smt-comp/fv2_serial/train",#10
+              "data/klee/fv2_serial/train",#11
               "checkpoints/simulation/k_serial_pad_feature_l_z_r_200.pkl",#12
               "checkpoints/simulation/k_serial_tree_feature_l_z_r_200.pkl"]#13
 
-test_input_list = []
-for root, dir, files in os.walk("data/gnucore/single_test"):
-    if not root.endswith("single_test"):
-        test_input_list.append(root)
+# test for all programs in a dataset, the home directory is "data/gnucore/single_test"
+# test_input_list = []
+# for root, dir, files in os.walk("data/gnucore/single_test"):
+#     if not root.endswith("single_test"):
+#         test_input_list.append(root)
 
-for i in test_input_list:
-    input = i
-    # simulation_for_single_program(input, input_index)
+# for i in test_input_list:
+#     input = i
+#     simulation_for_single_program(test_directory, input_index)
+
 if args.input:
-    input = args.input
+    test_directory = args.test_directory
 else:
-    input = "data/gnucore/single_test/sha1sum"
-# input = "data/smt-comp/QF_BV/Sage"
-# input = "data/klee/arch-43200/solver-queries.smt2"
-simulation_for_single_program(input, input_index)
+    test_directory = "data/gnucore/single_test/sha1sum"
+# some test
+# test_directory = "data/smt-comp/QF_BV/Sage"
+# test_directory = "data/klee/arch-43200/solver-queries.smt2"
+simulation_for_single_program(test_directory, input_index)
+
 # make_PCC_output("data/PCC_result/mcm_c.json", False)
 
+# regression simulation, not remember much, different time threshold
 # input = "checkpoints/smt-comp/serial_pad_feature_evaluation_c.pkl"
 # if os.path.exists(input):
 #     serial_result = th.load(input)["result"]

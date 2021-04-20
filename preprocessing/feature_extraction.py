@@ -157,7 +157,9 @@ class feature_extractor:
             self.logic_tree = vartree('unknown', None, None, None)
             # raise e
 
-    # record variables defined with reserve word "declare-fun", "declare-sort", ..., for later variable replacement
+    # record variables, other type defined with reserve word "declare-fun", "declare-sort", ...,
+    # for later variable replacement
+    # also allow the define after assertion has been added
     def handle_variable_defination(self, data):
         last_reserved_word = None
         left_count = 0
@@ -219,6 +221,7 @@ class feature_extractor:
         if define_fun:
             self.construct_define(define_list)
         self.feature[-1] = len(self.val_list)
+        asserts = [sl[0]] + ["(assert" + x for x in sl[1:]]
         return asserts
 
     def get_variable(self, data):

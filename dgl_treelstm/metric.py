@@ -11,8 +11,8 @@ class Metrics():
         confusion_matrix = torch.zeros(2, 2)
         for t, p in zip(labels.view(-1), predictions.view(-1)):
             confusion_matrix[t.long(), p.long()] += 1
-        print("confusion_matrix: ")
-        print(confusion_matrix)
+        # print("confusion_matrix: ")
+        # print(confusion_matrix)
         return confusion_matrix
 
     def f1_score(self, predictions, labels):

@@ -13,7 +13,7 @@ import torch.nn as nn
 from check_time import process_data, z3fun, getlogger
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.metric import Metrics
-from preprocessing import dgl_dataset,Tree_Dataset,Vocab,Constants,Vector_Dataset,op
+from preprocessing import Tree_Dataset,Vocab,Constants,Vector_Dataset,op
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler,MinMaxScaler
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -42,7 +42,7 @@ def main(args):
     train_dataset = None
     if args.cross_project:
         train_dataset = data
-        output_dir = os.path.join('./data', args.eva_input, 'gnucore_train')
+        output_dir = os.path.join(args.eva_input, 'gnucore_train')
         test_dataset = th.load(output_dir)
         data = test_dataset
     test_filename = list(set([x.filename for x in data]))
@@ -50,7 +50,9 @@ def main(args):
         test_filename = list(set([x.filename for x in data]))
         test_filename = list(set(x.split("_")[0] for x in test_filename))
     dataset = Vector_Dataset()
-    dataset.qt_list = data
+    dataset.fs_list = data
+
+    # output the predict data as json, allow the prediction from anywhere
     # output = {
     #     "x" : [i.feature.tolist() for i in data], "adjust" : [i.gettime("z3") for i in data],
     #     "origin" : [i.gettime("origin") for i in data],"filename" : [i.filename for i in data]
@@ -64,15 +66,15 @@ def main(args):
     truth = []
     s = time.time()
     print(len(data))
+
+    # some data analyse for the data
     # cor(data)
-    odds_ratio_test(data)
+    # odds_ratio_test(data)
     # return
-    # cl = KMeans(n_clusters=2)
-    # pred = cl.fit_predict([i.feature for i in data])
-    # truth = [1 if i.gettime(args.time_selection) > 200 else 0 for i in data]
-    # a = np.array([pred, truth])
+
     for fn in test_filename:
         if "smt-comp" in args.input:
+            # extrame data amount, remove if you want
             # if fn != "Sage2":
             #     continue
             fn = list(map(lambda x:x.filename, filter(lambda x: x.filename.split("_")[0] == fn, data)))
@@ -89,7 +91,7 @@ def main(args):
         # continue
         total_num += len(y_test)
         if iknn:
-            incremental_predict = simple_KNN(args, test_dataset, train_dataset, args.model_selection)
+            incremental_predict = simple_KNN(args, test_dataset, train_dataset)
             incremental_total_result.extend(incremental_predict)
 
         if sknn:
@@ -115,6 +117,7 @@ def main(args):
         f1 = f1_score(truth, sklearn_total_result)
         print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
 
+# correlation coefficient for different operators
 def cor(train_dataset):
     train_dataset = list(filter(lambda x: sum(x.feature) != 0, train_dataset))
     x = np.array([i.feature for i in train_dataset])
@@ -128,6 +131,7 @@ def cor(train_dataset):
         data = np.corrcoef(x[:,i], y)
         print(i, op[i], data[0,1])
 
+# odds_ratio experiment for different operators
 def odds_ratio_test(train_dataset):
     # train_dataset = list(filter(lambda x:sum(x.feature) != 0, train_dataset))
     x = np.array([i.feature for i in train_dataset])
@@ -170,6 +174,7 @@ def odds_ratio_test(train_dataset):
         except ZeroDivisionError:
             pass
 
+# bare KNN without incrementation, for comparision, better efficiency since the use of ball_tree
 def sklearn_KNN(args, test_dataset, train_dataset):
     clf = KNeighborsClassifier(3, algorithm="ball_tree")
     y_test = np.array([1 if i.gettime(args.time_selection) > args.time_limit_setting else 0 for i in test_dataset])
@@ -185,8 +190,8 @@ def sklearn_KNN(args, test_dataset, train_dataset):
     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
     return y_test_pred
 
-def simple_KNN(args, test_dataset, train_dataset, model_selection):
-    clf = KNN(k=7)
+def simple_KNN(args, test_dataset, train_dataset):
+    clf = KNN(k=3)
     y_test = np.array([1 if i.gettime(args.time_selection) > args.time_limit_setting else 0 for i in test_dataset])
     x_train = np.array([i.feature for i in train_dataset])
     y_train = np.array([1 if i.gettime(args.time_selection) > args.time_limit_setting else 0 for i in train_dataset])
@@ -230,28 +235,16 @@ def simple_KNN(args, test_dataset, train_dataset, model_selection):
 
 def load_dataset(args):
     dataset_type = Vector_Dataset
-    output_dir = os.path.join('./data', args.input)
+    output_dir = os.path.join( args.input)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    train_file = os.path.join(output_dir, 'gnucore_train')
-    test_file = os.path.join(output_dir, 'gnucore_test')
+    train_file = os.path.join(output_dir, 'train')
     dataset = []
     if os.path.isfile(train_file):
         train_dataset = th.load(train_file)
     else:
         qd = dataset_type(feature_number_limit=2)
-        train_dataset = qd.generate_feature_dataset(os.path.join('./data', args.data_source), args.time_selection)
-
-    if args.augment:
-        qd = dataset_type(feature_number_limit=2)
-        augment_path = os.path.join(args.augment_path, 'gnucore_train')
-        if os.path.isfile(augment_path):
-            aug_dataset = th.load(augment_path)
-            aug_dataset = list(filter(lambda x:x.adjust_time > 1, aug_dataset))
-        else:
-            print("augment data not found through the path")
-            aug_dataset = []
-        train_dataset = train_dataset + aug_dataset
+        train_dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
 
     if not os.path.isfile(train_file):
         th.save(train_dataset, train_file)
@@ -262,17 +255,19 @@ def load_dataset(args):
 def parse_arg():
     # global args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_classes', type=float, default=2)
-    parser.add_argument('--data_source', default='gnucore/fv2')
-    parser.add_argument('--input', default='gnucore/training')
-    parser.add_argument('--single_test', action='store_true')
-    parser.add_argument('--time_selection', default='origin')
-    parser.add_argument('--augment', action='store_true')
-    parser.add_argument('--augment_path', default='data/gnucore/augment/crosscombine')
-    parser.add_argument('--cross_project', action='store_true')
-    parser.add_argument('--eva_input', default='busybox/fv2')
-    parser.add_argument('--time_limit_setting', type=int, default=300)
-    parser.add_argument('--model_selection', default="all")
+    parser.add_argument('--data_source', default='gnucore/fv2', help="scripts saving directory")
+    parser.add_argument('--input', default='gnucore/training', help="saving directory of feature after "
+                            "extraction, avoid duplicate preprocess")
+    parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
+     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+    parser.add_argument('--cross_project', action='store_true', help="default test use the program from same "
+                        "dataset, use this option allow you to test program from other dataset")
+    parser.add_argument('--eva_input', default='busybox/fv2', help="cross project test scripts saving directory")
+    parser.add_argument('--time_limit_setting', type=int, default=300, help="the timeout threshold for solving, "
+                                                                            "must less than 300")
+    parser.add_argument('--model_selection', default="all", help="select the KNN running mode, 'knn' for bare KNN"
+                "'increment-knn' for the adaptive approach, 'all' for the comparsion of two ways,"
+                "further setting including 'increment-knn-fast', 'increment-knn-mask', 'increment-knn-error'")
     args = parser.parse_args()
     print(args)
     return args

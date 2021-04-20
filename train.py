@@ -24,7 +24,8 @@ from dgl_treelstm.trainer import Trainer,LSTM_Trainer
 from dgl_treelstm.nn_models import TreeLSTM, LSTM, RNN, DNN
 from dgl_treelstm.metric import Metrics
 from dgl_treelstm.util import extract_root
-from preprocessing import dgl_dataset,Tree_Dataset,Vocab,Constants,Vector_Dataset
+from dgl_treelstm.dgl_dataset import dgl_dataset
+from preprocessing import Tree_Dataset,Vocab,Constants,Vector_Dataset
 import torch.nn.utils.rnn as rnn_utils
 
 SSTBatch = collections.namedtuple('SSTBatch', ['graph', 'wordid', 'label', 'filename'])
@@ -67,7 +68,7 @@ def pad_feature_batcher(device, time_selection="origin", task="regression", thre
 
 def feature_batcher(device, time_selection="origin", task="regression", threshold=60):
     def batcher_dev(batch):
-        x = th.Tensor([item.logic_tree for item in batch])
+        x = th.Tensor([item.feature for item in batch])
         # x = [th.Tensor(item.feature) for item in batch]
         # data_length = [len(sq) for sq in x]
         if time_selection == "origin":
@@ -134,9 +135,9 @@ def main(args):
         task = "regression"
         metric_list = [metrics.mse, metrics.mae, metrics.pearson]
     else:
-        metric_name = "Acc"
+        metric_name = "f1_score"
         criterion = nn.CrossEntropyLoss(reduction='sum')
-        metric = metrics.f1_score
+        metric = metrics.confusion_matrix
         best_dev_metric = -1
         task = "classification"
         metric_list = [metrics.right_num, metrics.confusion_matrix, metrics.f1_score]
@@ -333,13 +334,13 @@ def main(args):
         total_result, total_loss = trainer.train(train_loader)
 
         print("==> Epoch {:05d} | Train Loss {:.4f} | {:s} {:.4f} | Time {:.4f}s".format(
-            epoch, total_loss / len(train_dataset), metric_name, total_result / len(train_dataset), time.time() - t_epoch))
+            epoch, total_loss / len(train_dataset), metric_name, total_result, time.time() - t_epoch))
 
 
         total_result, total_loss = trainer.test(test_loader)
 
         print("==> Epoch {:05d} | Dev Loss {:.4f} | {:s} {:.4f}".format(
-            epoch, total_loss / len(test_dataset), metric_name, total_result / len(test_dataset)))
+            epoch, total_loss / len(test_dataset), metric_name, total_result))
 
         # inspect data seperation's factors on result
         # for fn in test_filename[10 * slice: 10 * (slice + 1)]:
@@ -417,7 +418,7 @@ def main(args):
         #     print(fn)
         #     print("------------------------------------------")
 
-        dev_metric = total_result / len(test_dataset)
+        dev_metric = total_result
 
         if (args.regression and dev_metric < best_dev_metric) or (not args.regression and dev_metric > best_dev_metric):
             best_dev_metric = dev_metric
@@ -465,18 +466,21 @@ def load_file(args):
     return dataset
 
 
+# feature extraction or load the saved dataset for training
 def load_dataset(args):
+    # choose feature dataset structure
     if args.model == "tree-lstm":
         dataset_type = Tree_Dataset
         feature_limit = 100
     else:
         dataset_type = Vector_Dataset
         feature_limit = 50
+    #
     output_dir = args.input
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    train_file = os.path.join(output_dir, 'gnucore_train')
-    test_file = os.path.join(output_dir, 'gnucore_test')
+    train_file = os.path.join(output_dir, 'train')
+    test_file = os.path.join(output_dir, 'test')
     if args.cross_index < 0:
         fn_index = 0
     else:
@@ -486,10 +490,13 @@ def load_dataset(args):
     dataset = []
     if os.path.isfile(train_file):
         train_dataset = th.load(train_file)
+        if train_dataset == None:
+            train_dataset = []
         try:
             ind = 0
             while(os.path.exists(train_file + str(ind))):
-                train_dataset = train_dataset.extend(th.load(train_file + str(ind)))
+                train_dataset.extend(th.load(train_file + str(ind)))
+                ind = ind + 1
         except IOError:
             pass
         if os.path.isfile(test_file):
@@ -522,13 +529,13 @@ def load_dataset(args):
             # train_dataset = train_dataset + test_dataset
     else:
         treeforassert = "tree+feature" in args.input
-        qd = dataset_type(feature_number_limit=feature_limit, treeforassert=treeforassert)
+        qd = dataset_type(feature_number_limit=feature_limit, treeforassert=treeforassert, save_address=train_file)
         dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
         train_dataset, test_dataset = qd.split_with_filename(test_filename)
 
     if args.augment:
         qd = dataset_type(feature_number_limit=feature_limit)
-        augment_path = os.path.join(args.augment_path, 'gnucore_train')
+        augment_path = os.path.join(args.augment_path, 'train')
         if os.path.isfile(augment_path):
             aug_dataset = th.load(augment_path)
             aug_dataset = list(filter(lambda x:x.adjust_time > 1, aug_dataset))
@@ -538,15 +545,7 @@ def load_dataset(args):
         train_dataset = train_dataset + aug_dataset
 
     if not os.path.isfile(train_file):
-        # if len(dataset) > 10000:
-        #     th.save(dataset[:10000], train_file)
-        #     del dataset[:10000]
-        #     th.save(dataset[10000:20000], train_file + "_1")
-        #     del dataset[10000:20000]
-        #     th.save(dataset[20000:], train_file + "_2")
-        # else:
         th.save(dataset, train_file)
-        # th.save(test_dataset, test_file)
     print("train data:", len(train_dataset), "test data:", len(test_dataset))
     args.test_filename = test_filename
     # del qd
@@ -556,9 +555,10 @@ def load_dataset(args):
 def parse_arg():
     # global args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--seed', type=int, default=41)
-    parser.add_argument('--model', default='tree-lstm')
+    parser.add_argument('--gpu', type=int, default=0, help="the gpu number you want to use")
+    parser.add_argument('--seed', type=int, default=41, help="random seed")
+    parser.add_argument('--model', default='tree-lstm', help="model type, allow 'lstm', 'rnn', 'dnn', " 
+                            "'tree-lstm', make sure match data when reuse processed data")
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--child-sum', action='store_true')
     parser.add_argument('--x-size', type=int, default=300)
@@ -569,19 +569,22 @@ def parse_arg():
     parser.add_argument('--weight-decay', type=float, default=1e-3)
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--num_classes', type=float, default=2)
-    parser.add_argument('--data_source', default='data/gnucore/script_dataset/training')
-    parser.add_argument('--input', default='data/gnucore/training')
-    parser.add_argument('--regression', action='store_false')
+    parser.add_argument('--data_source', default='data/gnucore/script_dataset/training', help="scripts saving directory")
+    parser.add_argument('--input', default='data/gnucore/training', help="saving directory of feature after "
+                            "extraction, avoid duplicate preprocess")
+    parser.add_argument('--regression', action='store_false', help="not used for time prediction(regression), "
+    "use for timeout constraint classification(classification), refactor needed since against understanding")
     parser.add_argument('--attention', action='store_true')
-    parser.add_argument('--load', action='store_true')
-    parser.add_argument('--load_file', default='regression2_0.05')
-    parser.add_argument('--single_test', action='store_true')
-    parser.add_argument('--time_selection', default='origin')
-    parser.add_argument('--augment', action='store_true')
+    parser.add_argument('--load', action='store_true', help="model evaluation for programs")
+    parser.add_argument('--load_file', default='regression2_0.05', help="the path to model for evaluation")
+    parser.add_argument('--single_test', action='store_true', help="test for single script, not maintained")
+    parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
+     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+    parser.add_argument('--augment', action='store_true', help="make you own augment, not maintained")
     parser.add_argument('--augment_path', default='data/gnucore/augment/crosscombine')
-    parser.add_argument('--random_test', action='store_true')
-    parser.add_argument('--threshold', type=int, default=200)
-    parser.add_argument('--cross_index', type=int, default=-1)
+    parser.add_argument('--random_test', action='store_true', help="random separation for program for test")
+    parser.add_argument('--threshold', type=int, default=200, help="the timeout threshold for solving, must less than 300")
+    parser.add_argument('--cross_index', type=int, default=-1, help="cross-validation of data, must less than 3")
     args = parser.parse_args()
     print(args)
     return args

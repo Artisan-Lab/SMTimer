@@ -30,7 +30,7 @@ class dgl_dataset(object):
                 self.filename_list.append(None)
 
     def _build_tree(self, qt):
-        root = qt.logic_tree
+        root = qt.feature
         g = nx.DiGraph()
         def _rec_build(nid, root):
             for child in [root.left, root.mid, root.right]:

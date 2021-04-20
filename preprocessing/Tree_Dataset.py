@@ -16,7 +16,7 @@ class Tree_Dataset(Dataset):
             print(len(self.fs_list))
             gc.collect()
         if len(self.fs_list) == 5000:
-            th.save(self.fs_list, self.save_address + str(output_ind) + ".pkl")
+            th.save(self.fs_list, self.save_address + str(output_ind))
             output_ind += 1
             del self.fs_list
             gc.collect()

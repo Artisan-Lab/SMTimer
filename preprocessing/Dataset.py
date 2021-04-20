@@ -4,6 +4,7 @@ import random
 import sys
 import gc
 # signal used to stop extremely long time of parse, no supported on Windows, remove if needed
+import traceback
 import signal
 
 from .feature_extraction import Script_Info, feature_extractor
@@ -73,7 +74,7 @@ class Dataset:
                         if script.solving_time < 20 and script.solving_time_dic["z3"][0] < 10:
                             if ind % 10 != 0:
                                 continue
-                    selected_filename.append(script)
+                    selected_filename.append(string.split("/")[-1])
                 except:
                     pass
                 signal.signal(signal.SIGALRM, handler)
@@ -86,6 +87,7 @@ class Dataset:
                     signal.alarm(0)
                     print("preprocess over time", len(self.fs_list))
                 except (KeyError, AttributeError):
+                    traceback.print_exc()
                     continue
                 finally:
                     signal.alarm(0)
@@ -149,6 +151,8 @@ class Dataset:
                 files.sort(key=lambda x: (len(x), x))
                 for file in files:
                     if selected_file and file not in selected_file:
+                        continue
+                    if file.endswith("txt"):
                         continue
                     # if os.path.getsize(os.path.join(root, file)) > 512 * 1024:
                     #     continue
