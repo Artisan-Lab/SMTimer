@@ -18,6 +18,7 @@ class Predictor:
         Predictor.timeout_threshold = timeout_threshold
         self.init_static()
         self.remove_name = False
+        self.x = np.zeros((1, 300))
 
     @staticmethod
     def init_static():

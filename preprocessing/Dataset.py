@@ -92,7 +92,7 @@ class Dataset:
                 finally:
                     signal.alarm(0)
                 output_ind = self.print_and_write(output_ind)
-        if not self.selected_file and len(selected_filename) != None:
+        if not self.selected_file and len(selected_filename) != None and len(self.script_filename_list) > 30000:
             with open(os.path.dirname(input) + "/selected_file.txt", "w") as f:
                 for i in selected_filename:
                     f.write(i + "\n")

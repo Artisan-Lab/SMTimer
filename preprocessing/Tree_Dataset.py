@@ -1,6 +1,6 @@
 import gc
-# if you are intended not use tree structure, you may not use torch by remove torch dependency in this file
-# to run the only KNN model.
+# to do: use other serialize way to save the data. to allow KNN not use torch at all so that if you are intended not use
+# tree structure, you may not use torch by remove torch dependency and usage in this file to run the only KNN model.
 import torch as th
 
 from .feature_extraction import Script_Info, feature_extractor

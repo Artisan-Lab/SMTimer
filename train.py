@@ -291,7 +291,7 @@ def main(args):
         # print(results)
         dir = args.input[5:]
         th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([dir, 'evaluation',
-               None if args.regression else "c" , None if args.cross_index < 0 else str(args.cross_index + 1)])))
+               "r" if args.regression else "c" , None if args.cross_index < 0 else str(args.cross_index + 1)])))
         return
 
     if args.model == "tree-lstm":
@@ -572,8 +572,8 @@ def parse_arg():
     parser.add_argument('--data_source', default='data/gnucore/script_dataset/training', help="scripts saving directory")
     parser.add_argument('--input', default='data/gnucore/training', help="saving directory of feature after "
                             "extraction, avoid duplicate preprocess")
-    parser.add_argument('--regression', action='store_false', help="not used for time prediction(regression), "
-    "use for timeout constraint classification(classification), refactor needed since against understanding")
+    parser.add_argument('--regression', action='store_true', help="used for time prediction(regression), "
+                        "not use for timeout constraint classification(classification)")
     parser.add_argument('--attention', action='store_true')
     parser.add_argument('--load', action='store_true', help="model evaluation for programs")
     parser.add_argument('--load_file', default='regression2_0.05', help="the path to model for evaluation")

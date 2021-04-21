@@ -6,12 +6,13 @@ import json
 
 import os
 import sys
-from matplotlib import pyplot
+# from matplotlib import pyplot
 from torch.utils.data import DataLoader
 
 import Constants
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.nn_models import *
+from dgl_treelstm.metric import *
 from preprocessing import Vocab
 from preprocessing import varTree
 from dgl_treelstm.dgl_dataset import dgl_dataset
@@ -27,12 +28,15 @@ warnings.filterwarnings('ignore')
 
 # simulation for different models
 class Simulation:
-    def __init__(self, model, threshold=200):
+    def __init__(self, model, time_selection="adjust", threshold=200):
         self.model = model
+        # this threshold can be adaptive, which is updated in the simulation to find a better border for timeout
         self.threshold = threshold
+        # save data for adaptive threshold
         self.time_record = {"timeout":[], "solvable":[]}
-        self.time_out_setting = 300
-        self.time_selection = "adjust"
+        # this is the actual time setting, which is fixed for comparision the ground truth
+        self.time_out_setting = 200
+        self.time_selection = time_selection
         if isinstance(self.model, TreeLSTM):
             self.model_type = "TreeLSTM"
             self.preprocess = Tree_Dataset.generate_feature_dataset
@@ -67,7 +71,7 @@ class Simulation:
             feature = data.logic_tree
             solve_time = data.gettime("origin")
         elif self.model_type == "LSTM":
-            dataloader = DataLoader(dataset=[data], batch_size=1, collate_fn=pad_feature_batcher('cpu', 'origin'),
+            dataloader = DataLoader(dataset=[data], batch_size=1, collate_fn=pad_feature_batcher('cpu', 'original'),
                                          shuffle=False, num_workers=0)
             iterator = iter(dataloader)
             data = next(iterator)
@@ -96,12 +100,6 @@ class Simulation:
                 predict_result = self.model(feature, h, c)
             skip = predict_result > self.threshold
         return predict_result, skip
-
-    def update_model(self, feature, result):
-        if self.model_type != "KNN":
-            return
-        self.model.x = np.append(self.model.x, feature)
-        self.model.y = np.append(self.model.y, result)
 
     def modify_threshold(self, result, truth):
         if self.model_type == "KNN":
@@ -136,8 +134,8 @@ class Simulation:
             pass
 
 class KNN_Simulation(Simulation):
-    def __init__(self, model, threshold=200):
-        super(KNN_Simulation, self).__init__(model, threshold)
+    def __init__(self, model, time_selection="adjust", threshold=200):
+        super(KNN_Simulation, self).__init__(model, time_selection, threshold)
         self.model_type = "KNN"
         self.preprocess = Vector_Dataset.generate_feature_dataset
         self.separate_test = False
@@ -174,8 +172,8 @@ class KNN_Simulation(Simulation):
         return predict_result, skip
 
 class LSTM_Simulation(Simulation):
-    def __init__(self, model, threshold=200):
-        super(LSTM_Simulation, self).__init__(model, threshold)
+    def __init__(self, model, time_selection="adjust", threshold=200):
+        super(LSTM_Simulation, self).__init__(model, time_selection, threshold)
         self.model_type = "LSTM"
         self.preprocess = Vector_Dataset.generate_feature_dataset
 
@@ -201,8 +199,8 @@ class LSTM_Simulation(Simulation):
         return predict_result, skip
 
 class TreeLSTM_Simulation(Simulation):
-    def __init__(self, model, threshold=200):
-        super(TreeLSTM_Simulation, self).__init__(model, threshold)
+    def __init__(self, model, time_selection="adjust", threshold=200):
+        super(TreeLSTM_Simulation, self).__init__(model, time_selection, threshold)
         self.model_type = "TreeLSTM"
         self.preprocess = Tree_Dataset.generate_feature_dataset
 
@@ -254,24 +252,26 @@ class Evalution:
         self.classify_result = np.append(self.classify_result, self.get_numpy(classify_result))
 
     def score(self):
-        acc = accuracy_score(self.pred, self.truth)
-        pre = precision_score(self.pred, self.truth)
-        rec = recall_score(self.pred, self.truth)
-        f1 = f1_score(self.pred, self.truth)
+        acc = accuracy_score(self.pred, self.classify_result)
+        pre = precision_score(self.pred, self.classify_result)
+        rec = recall_score(self.pred, self.classify_result)
+        f1 = f1_score(self.pred, self.classify_result)
         return acc, pre, rec, f1
 
 # time calculation
 class Time_Section:
     def __init__(self):
-        self.origin_time = 0
+        self.original_time = 0
         self.predict_time = 0
         # overall time for simulation comparision(without solving phase 1 which manually added)
         self.final_time = 0
         self.preprocessing_time = 0
 
     def update(self, predict_result, solve_time):
-        self.origin_time += solve_time
+        self.original_time += solve_time
+        # for the first solving phase t1=1s
         self.final_time += 1
+        # skip if predicted timeout
         if not predict_result:
             self.final_time += solve_time
 
@@ -280,6 +280,8 @@ class Time_Section:
         self.predict_time = predict_used_time
         self.final_time = self.final_time + predict_used_time + preprocessing_time
 
+# load the test data, script to feature just like the training, we do not saving the result because the program number
+# we also want to include the processing time into final time
 def load_data(model, input):
     dataset = None
     if model == "Tree-LSTM":
@@ -309,7 +311,7 @@ def load_data(model, input):
             dataset.generate_feature_dataset(input)
     return dataset.fs_list, input
 
-# mainly for cross dataset prediction for adaptive KNN model
+# mainly for cross dataset prediction for adaptive KNN model, rely on my model naming pattern
 def identify_dataset(input, dataset):
     for i in ["busybox", "smt-comp", "klee"]:
         if i in input:
@@ -363,42 +365,42 @@ def make_PCC_output(input, output_result):
                 threshold_list.append(dt_simulation.threshold)
             classify_result = [1.0 if pred[i] > threshold_list[i] else 0.0 for i in range(len(pred))]
             # classify_result = [1.0 if x > data["time_limit_setting"] else 0.0 for x in pred]
-        origin_time = sum(truth)
+        original_time = sum(truth)
         pred_truth_tuple = list(
             zip(range(len(pred)), pred, truth, classify_result))
         pred_truth_diff_tuple = list(filter(lambda a: a[3] != (a[2] > data["time_limit_setting"]), pred_truth_tuple))
         pred_truth_tuple = list(filter(lambda a: a[3] != 0, pred_truth_tuple))
-        final_time = origin_time - sum([x[2] for x in pred_truth_tuple])
+        final_time = original_time - sum([x[2] for x in pred_truth_tuple])
         truth = [1 if x > data["time_limit_setting"] else 0 for x in truth]
         acc = accuracy_score(truth, classify_result)
         pre = precision_score(truth, classify_result)
         rec = recall_score(truth, classify_result)
         f1 = f1_score(truth, classify_result)
         print_output = {"train_dataset": "gnucore", "test_dataset": "gnucore", "pred_truth_diff_tuple": pred_truth_diff_tuple,
-                        "origin_time": origin_time,
+                        "original_time": original_time,
                         "total_time": final_time, "input": input, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fp": sum(truth)*(1 - rec), "fn": sum(truth)*rec/pre - sum(truth)*rec}
+                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
         print(print_output)
         output = {"train_dataset": "gnucore", "test_dataset": "gnucore", "predicted_solving_time": pred,
-                  "acutal_solving_time": truth, "origin_time": origin_time, "total_time": final_time,
+                  "acutal_solving_time": truth, "original_time": original_time, "total_time": final_time,
                   "metrics": {"acc": acc, "pre": pre, "rec": rec, "f1": f1, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fp": sum(truth)*(1 - rec), "fn": sum(truth)*rec/pre - sum(truth)*rec},
+                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec},
                   "time_out_setting": data["time_limit_setting"],
                   "model": "PCC", "input": input}
         output = json.dumps(output, indent=4)
         # print(print_output)
         print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
-        fpr, tpr, thresholds = roc_curve(truth, pred)
-        pyplot.plot(fpr, tpr, lw=1, label="lstm")
-        # print(fpr, tpr, thresholds)
-        pyplot.xlim([0.00, 1.0])
-        pyplot.ylim([0.00, 1.0])
-        pyplot.xlabel("False Positive Rate")
-        pyplot.ylabel("True Positive Rate")
-        pyplot.title("ROC")
-        pyplot.legend(loc="lower right")
-        pyplot.savefig(r"./ROC.png")
-        pyplot.show()
+        # fpr, tpr, thresholds = roc_curve(truth, pred)
+        # pyplot.plot(fpr, tpr, lw=1, label="lstm")
+        # # print(fpr, tpr, thresholds)
+        # pyplot.xlim([0.00, 1.0])
+        # pyplot.ylim([0.00, 1.0])
+        # pyplot.xlabel("False Positive Rate")
+        # pyplot.ylabel("True Positive Rate")
+        # pyplot.title("ROC")
+        # pyplot.legend(loc="lower right")
+        # pyplot.savefig(r"./ROC.png")
+        # pyplot.show()
         if output_result:
             try:
                 outpur_path = "_".join(["gnucore", input.split("/")[-1], "DNN"]) + ".json"
@@ -409,6 +411,7 @@ def make_PCC_output(input, output_result):
                     f.write(output)
 
 # output the result for a single program
+# to do: not support for adaptive threshold for regression simulation
 def make_output(dsn1, dsn2, input, simulation, result, time_section, output_result=True, plot_picture=True):
     pred_truth_tuple = list(zip(range(len(result.pred)), result.pred.tolist(), result.truth.tolist(), result.classify_result))
     pred_truth_tuple = list(filter(lambda a:a[3] != (a[2] > simulation.time_out_setting), pred_truth_tuple))
@@ -418,33 +421,33 @@ def make_output(dsn1, dsn2, input, simulation, result, time_section, output_resu
     rec = recall_score(truth, result.classify_result)
     f1 = f1_score(truth, result.classify_result)
     print_output = {"train_dataset": dsn1, "test_dataset": dsn2, "pred_truth_diff_tuple": pred_truth_tuple,
-                    "origin_time": time_section.origin_time,
+                    "original_time": time_section.original_time,
                     "predict_time":time_section.predict_time + time_section.preprocessing_time,
                     "total_time": time_section.final_time, "input":input, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fp": sum(truth)*(1 - rec), "fn": sum(truth)*rec/pre - sum(truth)*rec}
+                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
     output = {"train_dataset": dsn1, "test_dataset": dsn2, "predicted_solving_time": result.pred.tolist(),
-              "acutal_solving_time": result.truth.tolist(), "origin_time": time_section.origin_time, "predict_time":
+              "acutal_solving_time": result.truth.tolist(), "original_time": time_section.original_time, "predict_time":
               time_section.predict_time + time_section.preprocessing_time, "total_time": time_section.final_time,
               "metrics":{"acc": acc, "pre": pre, "rec": rec, "f1": f1}, "time_out_setting": simulation.time_out_setting,
               "model":simulation.model_type, "input":input, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fp": sum(truth)*(1 - rec), "fn": sum(truth)*rec/pre - sum(truth)*rec}
+                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
     if not len(result.truth):
         return
     output = json.dumps(output, indent=4)
     print(print_output)
     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
-    if simulation.model_type != 'KNN':
-        fpr, tpr, thresholds = roc_curve(result.truth > simulation.time_out_setting, result.pred)
-        pyplot.plot(fpr, tpr, lw=1, label=simulation.model_type)
-        # print(fpr, tpr, thresholds)
-        pyplot.xlim([0.00, 1.0])
-        pyplot.ylim([0.00, 1.0])
-        pyplot.xlabel("False Positive Rate")
-        pyplot.ylabel("True Positive Rate")
-        pyplot.title("ROC")
-        pyplot.legend(loc="lower right")
-        pyplot.savefig(r"./ROC.png")
-        pyplot.show()
+    # if simulation.model_type != 'KNN':
+    #     fpr, tpr, thresholds = roc_curve(result.truth > simulation.time_out_setting, result.pred)
+    #     pyplot.plot(fpr, tpr, lw=1, label=simulation.model_type)
+    #     # print(fpr, tpr, thresholds)
+    #     pyplot.xlim([0.00, 1.0])
+    #     pyplot.ylim([0.00, 1.0])
+    #     pyplot.xlabel("False Positive Rate")
+    #     pyplot.ylabel("True Positive Rate")
+    #     pyplot.title("ROC")
+    #     pyplot.legend(loc="lower right")
+    #     pyplot.savefig(r"./ROC.png")
+    #     pyplot.show()
     if output_result:
         try:
             if args.model_name == "KNN":
@@ -486,8 +489,11 @@ def choose_input(dataset, input, load_path):
 # the time different is taken as the time saved.
 # the simulation may not reflect the real situation since wrongly skip path means the change of path selection, but if
 # you give it a low priority, then these paths are just deferred, you may execute more paths in the same time budget.
-def simulation_for_single_program(input, input_index):
+def simulation_for_single_program(test_directory, args):
     s = time.time()
+    input_index = args.input_index
+    load_path = args.load_file
+    # some setting process since all simulation use one entry
     if args.classification:
         regression = False
         input_list[int(input_index)] = input_list[int(input_index)].replace("_r_", "_c_")
@@ -495,43 +501,43 @@ def simulation_for_single_program(input, input_index):
         regression = True
     if model_name == "KNN":
         knn = KNN()
-        simulation = KNN_Simulation(knn)
+        simulation = KNN_Simulation(knn, time_selection=args.time_selection)
         if not input_index:
             input_index = 8
     elif model_name == "lstm":
         lstm = LSTM(150, regression, False)
-        simulation = LSTM_Simulation(lstm)
+        simulation = LSTM_Simulation(lstm, time_selection=args.time_selection)
         if not input_index:
             input_index = 0
     else:
         tree_lstm = TreeLSTM(133, 150, 150, 1, 0.5, regression, False, cell_type='childsum', pretrained_emb=None)
-        simulation = TreeLSTM_Simulation(tree_lstm)
+        simulation = TreeLSTM_Simulation(tree_lstm, time_selection=args.time_selection)
         if not input_index:
             input_index = 2
-    simulation.time_selection = "adjust"
-    # simulation.threshold = 60
-    if simulation.time_selection == "adjust":
-        simulation.time_out_setting = 200
-    else:
-        simulation.time_out_setting = 100
-    if input == None:
-        input = input_list[int(input_index)]
-    serial_data, test_input = load_data(model_name, input)
+    # setting timeout threshold
+    # for original time, we collect the data with timeout with 100s, larger than it would be useless
+    simulation.time_out_setting = args.threshold
+    if test_directory == None:
+        test_directory = input_list[int(input_index)]
+    serial_data, test_input = load_data(model_name, test_directory)
     time_section = Time_Section()
     result = Evalution()
+    # for cross project, identify dataset name
     dsn1 = identify_dataset(input_list[int(input_index)], None)
     dsn2 = identify_dataset(test_input, serial_data)
-    load_path = input_list[int(input_index)]
+    # load the model for different approach
+    if load_path == None:
+        load_path = input_list[int(input_index)]
     if model_name != "KNN":
         load_path = choose_input(dsn1, test_input, load_path)
     simulation.load_model(load_path)
     s1 = time.time()
     aindex = 0
+    # simulation system, but not actual solving since the solving time is consuming, and time may be different
     for data in serial_data:
         data_index = len(result.truth)
         feature, solve_time = simulation.script_to_feature(data)
         predict_result, skip = simulation.predict(feature, 1 if solve_time > simulation.time_out_setting else 0)
-        # simulation.update_model(feature, predict_result)
         if len(result.pred) % 500 == 0:
             print(len(result.pred))
         if model_name != "KNN" and regression and args.adapt:
@@ -546,107 +552,115 @@ def simulation_for_single_program(input, input_index):
         aindex += 1
     e = time.time()
     time_section.add_prediction_time(e - s1, s1 - s)
-    make_output(dsn1, dsn2, input, simulation, result, time_section, True, True)
+    make_output(dsn1, dsn2, test_directory, simulation, result, time_section, True, True)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--model_name', default="KNN", help="model type, allow 'lstm', 'tree-lstm', 'KNN'")
-parser.add_argument('--test_directory', default=None, help="the script saving directory for test program")
-parser.add_argument('--load_file', default=None, help="the path to model for evaluation")
-parser.add_argument('--input_index', type=int, default=8, help="short-way for switch evaluation model,"
-                            "hardcoded, not recommanded to change for use")
-parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
-     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
-parser.add_argument('--classification', action='store_true', help="not used for time prediction(regression), "
-    "use for timeout constraint classification(classification)")
-parser.add_argument('--adapt', action='store_true', help="an adaptive time threshold for neural network models "
-                "used for regression, because the predicted timeout threshold varies for different programs")
-parser.add_argument('--batch-size', type=int, default=64, help="some lstm setting in case you change the model")
-parser.add_argument('--x-size', type=int, default=300)
-parser.add_argument('--h-size', type=int, default=150)
-parser.add_argument('--epochs', type=int, default=40)
-parser.add_argument('--num_classes', type=float, default=2)
-args = parser.parse_args()
-print(args)
+def parse_arg():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_name', default="KNN", help="model type, allow 'lstm', 'tree-lstm', 'KNN'")
+    parser.add_argument('--test_directory', default=None, help="the script saving directory for test program")
+    parser.add_argument('--load_file', default=None, help="the path to model for evaluation")
+    parser.add_argument('--input_index', type=int, default=8, help="short-way for switch evaluation model,"
+                                "hardcoded, not recommanded to change for use")
+    parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
+    "'original', 'adjust', the 'adjust' stand for 'z3' by now, modify when you experiment with other solver")
+    parser.add_argument('--classification', action='store_true', help="not used for time prediction(regression),"
+        "use for timeout constraint classification(classification)")
+    parser.add_argument('--adapt', action='store_true', help="an adaptive time threshold for neural network "
+        "models used for regression, because the predicted timeout threshold varies for different programs")
+    parser.add_argument('--threshold', type=int, default=200, help="the timeout threshold for solving")
+    parser.add_argument('--batch-size', type=int, default=64, help="some lstm setting in case you change the model")
+    parser.add_argument('--x-size', type=int, default=300)
+    parser.add_argument('--h-size', type=int, default=150)
+    parser.add_argument('--epochs', type=int, default=40)
+    parser.add_argument('--num_classes', type=float, default=2)
+    args = parser.parse_args()
+    print(args)
+    return args
 
-model_name = args.model_name
-input_index = args.input_index
-# hardcoded short-way for switch evaluation model
-input_list = ["checkpoints/simulation/g_serial_pad_feature_l_z_r_200.pkl",#0
-              "checkpoints/simulation/g_serial_tree_feature_t_z_r_200.pkl",#1
-              "checkpoints/simulation/g_tree+feature_t_z_r_200.pkl",#2
-              "checkpoints/simulation/b_serial_pad_feature_l_z_r_200.pkl",#3
-              "checkpoints/simulation/b_serial_tree_feature_t_z_r_200.pkl",#4
-              "checkpoints/simulation/b_tree+feature_t_z_r_200.pkl",#5
-              "checkpoints/simulation/s_serial_pad_feature_l_z_r_200.pkl",#6
-              "checkpoints/simulation/s_tree_feature_t_z_r_200.pkl",#7
-              "data/gnucore/fv2_serial/train",#8
-              "data/busybox/fv2_serial/train",#9
-              "data/smt-comp/fv2_serial/train",#10
-              "data/klee/fv2_serial/train",#11
-              "checkpoints/simulation/k_serial_pad_feature_l_z_r_200.pkl",#12
-              "checkpoints/simulation/k_serial_tree_feature_l_z_r_200.pkl"]#13
+if __name__ == '__main__':
+    args = parse_arg()
+    model_name = args.model_name
+    input_index = args.input_index
+    # hardcoded short-way for switch evaluation model
+    input_list = ["checkpoints/simulation/g_serial_pad_feature_l_z_r_200.pkl",#0
+                  "checkpoints/simulation/g_serial_tree_feature_t_z_r_200.pkl",#1
+                  "checkpoints/simulation/g_tree+feature_t_z_r_200.pkl",#2
+                  "checkpoints/simulation/b_serial_pad_feature_l_z_r_200.pkl",#3
+                  "checkpoints/simulation/b_serial_tree_feature_t_z_r_200.pkl",#4
+                  "checkpoints/simulation/b_tree+feature_t_z_r_200.pkl",#5
+                  "checkpoints/simulation/s_serial_pad_feature_l_z_r_200.pkl",#6
+                  "checkpoints/simulation/s_tree_feature_t_z_r_200.pkl",#7
+                  "data/gnucore/fv2_serial/train",#8
+                  "data/busybox/fv2_serial/train",#9
+                  "data/smt-comp/fv2_serial/train",#10
+                  "data/klee/fv2_serial/train",#11
+                  "checkpoints/simulation/k_serial_pad_feature_l_z_r_200.pkl",#12
+                  "checkpoints/simulation/k_serial_tree_feature_l_z_r_200.pkl"]#13
+    if args.load_file == None and (args.input_index > 13 or args.input_index < 0):
+        print("these paths are hardcoded shortway for specific directory name")
+        print(input_list)
+        exit(0)
+    # test for all programs in a dataset, the home directory is "data/gnucore/single_test"
+    # test_input_list = []
+    # for root, dir, files in os.walk("data/gnucore/single_test"):
+    #     if not root.endswith("single_test"):
+    #         test_input_list.append(root)
 
-# test for all programs in a dataset, the home directory is "data/gnucore/single_test"
-# test_input_list = []
-# for root, dir, files in os.walk("data/gnucore/single_test"):
-#     if not root.endswith("single_test"):
-#         test_input_list.append(root)
+    # for i in test_input_list:
+    #     input = i
+    #     simulation_for_single_program(test_directory, input_index)
 
-# for i in test_input_list:
-#     input = i
-#     simulation_for_single_program(test_directory, input_index)
+    if args.test_directory:
+        test_directory = args.test_directory
+    else:
+        test_directory = "data/example/arch"
+    # some test
+    # test_directory = "data/smt-comp/QF_BV/Sage"
+    # test_directory = "data/klee/arch-43200/solver-queries.smt2"
+    simulation_for_single_program(test_directory, args)
 
-if args.input:
-    test_directory = args.test_directory
-else:
-    test_directory = "data/gnucore/single_test/sha1sum"
-# some test
-# test_directory = "data/smt-comp/QF_BV/Sage"
-# test_directory = "data/klee/arch-43200/solver-queries.smt2"
-simulation_for_single_program(test_directory, input_index)
+    # make_PCC_output("data/PCC_result/mcm_c.json", False)
 
-# make_PCC_output("data/PCC_result/mcm_c.json", False)
-
-# regression simulation, not remember much, different time threshold
-# input = "checkpoints/smt-comp/serial_pad_feature_evaluation_c.pkl"
-# if os.path.exists(input):
-#     serial_result = th.load(input)["result"]
-# else:
-#     serial_result = []
-#     for i in range(1, 4):
-#         a = th.load(input[:-4] + "_" + str(i) + ".pkl")["result"]
-#         serial_result.extend(a)
-# result = serial_result
-# pred = np.array(list(map(lambda x:x[0], result)))
-# truth = np.array(list(map(lambda x:x[1], result)))
-# for a in [40,50,60,100,150,200,250]:
-#     if truth.dtype == "int64":
-#         t, p = truth, pred
-#     else:
-#         t, p = truth > a, pred > a
-#         print("threshold", a)
-#     acc = accuracy_score(t, p)
-#     pre = precision_score(t, p)
-#     rec = recall_score(t, p)
-#     f1 = f1_score(t, p)
-#     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
-#     if truth.dtype == "int64":
-#         break
-# try:
-#     fpr, tpr, thresholds = precision_recall_curve(truth > a, pred)
-#     pyplot.plot(tpr, fpr, lw=1, label="lstm")
-#     # print(fpr)
-#     # print(tpr)
-#     # print(thresholds)
-#     i = np.searchsorted(thresholds, a)
-#     print(fpr[i], tpr[i], thresholds[i])
-#     pyplot.xlim([0.00, 1.0])
-#     pyplot.ylim([0.00, 1.0])
-#     pyplot.xlabel("False Positive Rate")
-#     pyplot.ylabel("True Positive Rate")
-#     pyplot.title("ROC")
-#     pyplot.legend(loc="lower right")
-#     pyplot.savefig(r"./ROC.png")
-#     pyplot.show()
-# except (IndexError, ValueError):
-#     pass
+    # regression simulation, not remember much, different time threshold
+    # input = "checkpoints/smt-comp/serial_pad_feature_evaluation_c.pkl"
+    # if os.path.exists(input):
+    #     serial_result = th.load(input)["result"]
+    # else:
+    #     serial_result = []
+    #     for i in range(1, 4):
+    #         a = th.load(input[:-4] + "_" + str(i) + ".pkl")["result"]
+    #         serial_result.extend(a)
+    # result = serial_result
+    # pred = np.array(list(map(lambda x:x[0], result)))
+    # truth = np.array(list(map(lambda x:x[1], result)))
+    # for a in [40,50,60,100,150,200,250]:
+    #     if truth.dtype == "int64":
+    #         t, p = truth, pred
+    #     else:
+    #         t, p = truth > a, pred > a
+    #         print("threshold", a)
+    #     acc = accuracy_score(t, p)
+    #     pre = precision_score(t, p)
+    #     rec = recall_score(t, p)
+    #     f1 = f1_score(t, p)
+    #     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
+    #     if truth.dtype == "int64":
+    #         break
+    # try:
+    #     fpr, tpr, thresholds = precision_recall_curve(truth > a, pred)
+    #     pyplot.plot(tpr, fpr, lw=1, label="lstm")
+    #     # print(fpr)
+    #     # print(tpr)
+    #     # print(thresholds)
+    #     i = np.searchsorted(thresholds, a)
+    #     print(fpr[i], tpr[i], thresholds[i])
+    #     pyplot.xlim([0.00, 1.0])
+    #     pyplot.ylim([0.00, 1.0])
+    #     pyplot.xlabel("False Positive Rate")
+    #     pyplot.ylabel("True Positive Rate")
+    #     pyplot.title("ROC")
+    #     pyplot.legend(loc="lower right")
+    #     pyplot.savefig(r"./ROC.png")
+    #     pyplot.show()
+    # except (IndexError, ValueError):
+    #     pass
