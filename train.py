@@ -45,12 +45,12 @@ def batcher(device):
                         filename=[x[1] for x in batch])
     return batcher_dev
 
-def pad_feature_batcher(device, time_selection="origin", task="regression", threshold=60):
+def pad_feature_batcher(device, time_selection="original", task="regression", threshold=60):
     def batcher_dev(batch):
         # x = th.Tensor([item.feature for item in batch])
         x = [th.Tensor(item.feature) for item in batch]
         data_length = [len(sq) for sq in x]
-        if time_selection == "origin":
+        if time_selection == "original":
             y = th.Tensor([item.origin_time for item in batch])
         else:
             y = th.Tensor([item.adjust_time for item in batch])
@@ -66,12 +66,12 @@ def pad_feature_batcher(device, time_selection="origin", task="regression", thre
                        data_len=data_length)
     return batcher_dev
 
-def feature_batcher(device, time_selection="origin", task="regression", threshold=60):
+def feature_batcher(device, time_selection="original", task="regression", threshold=60):
     def batcher_dev(batch):
         x = th.Tensor([item.feature for item in batch])
         # x = [th.Tensor(item.feature) for item in batch]
         # data_length = [len(sq) for sq in x]
-        if time_selection == "origin":
+        if time_selection == "original":
             y = th.Tensor([item.origin_time for item in batch])
         else:
             y = th.Tensor([item.adjust_time for item in batch])
@@ -137,7 +137,7 @@ def main(args):
     else:
         metric_name = "f1_score"
         criterion = nn.CrossEntropyLoss(reduction='sum')
-        metric = metrics.confusion_matrix
+        metric = metrics.accuracy
         best_dev_metric = -1
         task = "classification"
         metric_list = [metrics.right_num, metrics.confusion_matrix, metrics.f1_score]
@@ -145,151 +145,62 @@ def main(args):
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad,
                                         model.parameters()), lr=args.lr, weight_decay=args.weight_decay)
 
-
-    train_dataset, test_dataset = None, None
-
-    if not args.single_test:
-        train_dataset, test_dataset = load_dataset(args)
+    train_dataset, test_dataset = load_dataset(args)
 
     # test
-    if args.load:
+    if args.load_file is not None:
         checkpoint = th.load('checkpoints/{}.pkl'.format(args.load_file))
         model.load_state_dict(checkpoint['model'])
         optimizer = checkpoint['optim']
 
-        # dataset = dgl_dataset(train_dataset + test_dataset, smt_vocab, task)
-
         qd = Tree_Dataset()
         qd.fs_list = test_dataset + train_dataset
-        test_dataset = qd.fs_list
-        test_filename = set([i.filename for i in qd.fs_list])
+        # test_filename = set([i.filename for i in qd.fs_list])
         test_filename = checkpoint["args"].test_filename
-        # total_mean = np.mean(np.array([x.feature for x in train_dataset]), axis=0)
-        # total_std = np.std(np.array([x.feature for x in train_dataset]), axis=0)
-        # total_time_std = np.std(np.array([x.adjust_time for x in train_dataset]), axis=0)
-        # output = np.append(total_std,total_time_std)
-        # print(time_var)
-        # print(train_op)
         loss_list = []
-        for fn in test_filename:
-            print(fn)
-            _, test_dataset = qd.split_with_filename([fn])
-        # if True:
-        #     _,test_dataset = qd.split_with_filename(test_filename)
-            # test_dataset = qd.fs_list
-            # program_std = np.std(np.array([x.feature for x in test_dataset]), axis=0)
-            # program_mean = np.mean(np.array([x.feature for x in test_dataset]), axis=0)
-            # program_time_std = np.std(np.array([x.adjust_time for x in test_dataset]), axis=0)
-            # program_std = np.append(program_std, program_time_std)
-            # output = np.row_stack([output, program_std])
-            # print(time_var)
-            # if len(test_dataset) == 0:
-            #     continue
-            if args.model == "lstm" or args.model == "rnn":
-                dataset = test_dataset
-                test_loader = DataLoader(dataset=test_dataset,
-                                         batch_size=100, collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold),
-                                         shuffle=False, num_workers=0)
-            elif args.model == "tree-lstm":
-                dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
-                test_loader = DataLoader(dataset=dataset,
-                                         batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
-            print("here")
-            none_op = []
-            # for i in range(len(total_mean)):
-            #     if total_mean[i] == 0 and program_mean[i] != 0:
-            #         none_op.append(True)
-            #     else:
-            #         none_op.append(False)
-            # print(test_op)
-            # print(none_op)
-            print("train data:", len(train_dataset), "test data:", len(test_dataset))
+        if args.model == "lstm" or args.model == "rnn":
+            trainer = LSTM_Trainer(args, model, criterion, optimizer, device, metric, metric_name)
+        elif args.model == "tree-lstm":
+            trainer = Trainer(args, model, criterion, optimizer, device, metric, metric_name)
+        else:
+            trainer = LSTM_Trainer(args, model, criterion, optimizer, device, metric, metric_name)
 
-            total_result = 0
-            total_loss = 0
-            model.eval()
-            pred_tensor = None
-            label_tensor = None
-            if args.model == "tree-lstm":
-                for step, batch in enumerate(test_loader):
-                    g = batch.graph
-                    n = g.number_of_nodes()
-                    with th.no_grad():
-                        h = th.zeros((n, args.h_size)).to(device)
-                        c = th.zeros((n, args.h_size)).to(device)
-                        logits = model(batch, h, c)
-                    batch_label, logits = extract_root(batch, device, logits)
-                    if args.regression:
-                        logits = logits.reshape(-1)
-                        loss = criterion(logits, batch_label)
-                        total_loss += loss * g.batch_size
-                        pred = logits
-                    else:
-                        loss = criterion(logits, batch_label)
-                        total_loss += loss
-                        pred = th.argmax(F.log_softmax(logits), 1)
-                    metric_result = metric(pred, batch_label)
-                    total_result += metric_result
-                    if pred_tensor == None:
-                        pred_tensor = pred
-                        label_tensor = batch_label
-                    else:
-                        pred_tensor = th.cat([pred_tensor, pred], dim= -1)
-                        label_tensor = th.cat([label_tensor, batch_label], dim= -1)
-            elif args.model == "lstm" or "rnn":
-                for step, batch in enumerate(test_loader):
-                    batch_feature = batch.feature.to(device)
-                    batch_label = batch.label.to(device)
-                    n = batch.feature.shape[0]
-                    batch_feature = rnn_utils.pack_padded_sequence(batch_feature, batch.data_len, enforce_sorted=False, batch_first=True)
-                    with th.no_grad():
-                        logits = model(batch_feature).to(device)
-                    if args.regression:
-                        logits = logits.reshape(-1)
-                        loss = criterion(logits, batch_label)
-                        total_loss += loss * n
-                        pred = logits
-                    else:
-                        loss = criterion(logits, batch_label)
-                        total_loss += loss
-                        pred = th.argmax(F.log_softmax(logits), 1)
-                    metric_result = metric(pred, batch_label)
-                    total_result += metric_result
-                    if pred_tensor == None:
-                        pred_tensor = pred
-                        label_tensor = batch_label
-                    else:
-                        pred_tensor = th.cat([pred_tensor, pred], dim= -1)
-                        label_tensor = th.cat([label_tensor, batch_label], dim= -1)
+        if not args.single_program:
+            _,test_dataset = qd.split_with_filename(test_filename)
+            dataset, metric_dic, results, total_loss = evaluate_once(args, device, metric_list, metric_name,
+                                                                     pretrained_emb, smt_vocab, task, test_dataset,
+                                                                     trainer)
+        else:
+            from collections import defaultdict
+            metric_dic = defaultdict(list)
+            results = []
+            for fn in test_filename:
+                print(fn)
+                _, test_dataset = qd.split_with_filename([fn])
+                if len(test_dataset) == 0:
+                    continue
+                dataset, metric_single, result, total_loss = evaluate_once(args, device, metric_list, metric_name,
+                                                                         pretrained_emb, smt_vocab, task, test_dataset,
+                                                                         trainer)
+                loss_list.append(total_loss / len(dataset))
+                for key,value in metric_single.items():
+                    metric_dic[key].append(value)
+                results.append(result)
+                print(result)
 
-            print("==> Test Loss {:.4f} | {:s} {:.4f}".format(
-                total_loss / len(dataset), metric_name, total_result / len(dataset)))
-
-            dev_metric = total_result / len(dataset)
-
-            metric_dic = {}
-            # metric_list = [metrics.accuracy, metrics.confusion_matrix, metrics.f1_score]
-            for m in metric_list:
-                metric_dic[m.__name__] = m(pred_tensor, label_tensor)
-
-            pred_tensor = [i.item() for i in pred_tensor]
-            label_tensor = [i.item() for i in label_tensor]
-            results = list(zip(pred_tensor, label_tensor))
-            # print(results)
-
-            checkpoint = {
-                'model': model.state_dict(),
-                'optim': optimizer,
-                'metric': metric_name,
-                'metric_value': metric_dic,
-                'args': args,
-                'result': results
-            }
-            loss_list.append(total_loss / len(dataset))
-            print("------------------------------------------")
-        # print(metric_dic)
-        # print(results)
-        dir = args.input[5:]
+        checkpoint = {
+            'model': model.state_dict(),
+            'optim': optimizer,
+            'metric': metric_name,
+            'metric_value': metric_dic,
+            'args': args,
+            'result': results
+        }
+        print("------------------------------------------")
+        for item in metric_dic.items():
+            print(item)
+        # print(checkpoint)
+        dir = args.load_file[0]
         th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([dir, 'evaluation',
                "r" if args.regression else "c" , None if args.cross_index < 0 else str(args.cross_index + 1)])))
         return
@@ -327,7 +238,7 @@ def main(args):
         test_loader = DataLoader(dataset=test_dataset,
                                  batch_size=100, collate_fn=feature_batcher(device, args.time_selection, task, args.threshold), shuffle=False, num_workers=0)
 
-    checkpoint = {}
+    # training
     for epoch in range(args.epochs):
         t_epoch = time.time()
 
@@ -337,86 +248,10 @@ def main(args):
             epoch, total_loss / len(train_dataset), metric_name, total_result, time.time() - t_epoch))
 
 
-        total_result, total_loss = trainer.test(test_loader)
+        total_result, total_loss, _, _ = trainer.test(test_loader)
 
         print("==> Epoch {:05d} | Dev Loss {:.4f} | {:s} {:.4f}".format(
             epoch, total_loss / len(test_dataset), metric_name, total_result))
-
-        # inspect data seperation's factors on result
-        # for fn in test_filename[10 * slice: 10 * (slice + 1)]:
-        #     _, test_dataset = qd.split_with_filename([fn])
-        #     if len(test_dataset) == 0:
-        #         continue
-        #     dataset = dgl_dataset(test_dataset, smt_vocab, task)
-        #     test_loader = DataLoader(dataset=dataset,
-        #                              batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
-        #
-        #     test_op = np.mean(np.array([x.feature for x in test_dataset]), axis=0)
-        #     none_op = []
-        #     for i in range(len(train_op)):
-        #         if train_op[i] == 0 and test_op[i] != 0:
-        #             none_op.append(True)
-        #         else:
-        #             none_op.append(False)
-        #     print(test_op[-4:])
-        #     # print(none_op)
-        #     print("train data:", len(train_dataset), "test data:", len(test_dataset))
-        #
-        #     total_result = 0
-        #     total_loss = 0
-        #     model.eval()
-        #     pred_tensor = None
-        #     label_tensor = None
-        #     for step, batch in enumerate(test_loader):
-        #         g = batch.graph
-        #         n = g.number_of_nodes()
-        #         with th.no_grad():
-        #             h = th.zeros((n, args.h_size)).to(device)
-        #             c = th.zeros((n, args.h_size)).to(device)
-        #             logits = model(batch, h, c)
-        #         batch_label, logits = extract_root(batch, device, logits)
-        #         if args.regression:
-        #             logits = logits.reshape(-1)
-        #             loss = criterion(logits, batch_label)
-        #             total_loss += loss * g.batch_size
-        #             pred = logits
-        #         else:
-        #             loss = criterion(logits, batch_label)
-        #             total_loss += loss
-        #             pred = th.argmax(F.log_softmax(logits), 1)
-        #         metric_result = metric(pred, batch_label)
-        #         total_result += metric_result
-        #         if pred_tensor == None:
-        #             pred_tensor = pred
-        #             label_tensor = batch_label
-        #         else:
-        #             pred_tensor = th.cat([pred_tensor, pred], dim=-1)
-        #             label_tensor = th.cat([label_tensor, batch_label], dim=-1)
-        #
-        #     print("==> Test Loss {:.4f} | {:s} {:.4f}".format(
-        #         total_loss / len(dataset), metric_name, total_result / len(dataset)))
-        #
-        #     dev_metric = total_result / len(dataset)
-        #
-        #     metric_dic = {}
-        #     # metric_list = [metrics.accuracy, metrics.confusion_matrix, metrics.f1_score]
-        #     for m in metric_list:
-        #         metric_dic[str(m)] = m(pred_tensor, label_tensor)
-        #
-        #     pred_tensor = [i.item() for i in pred_tensor]
-        #     label_tensor = [i.item() for i in label_tensor]
-        #     results = list(zip(pred_tensor, label_tensor))
-        #
-        #     checkpoint = {
-        #         'model': model.state_dict(),
-        #         'optim': optimizer,
-        #         'metric': metric_name,
-        #         'metric_value': metric_dic,
-        #         'args': args,
-        #         'result': results
-        #     }
-        #     print(fn)
-        #     print("------------------------------------------")
 
         dev_metric = total_result
 
@@ -461,12 +296,47 @@ def main(args):
     # print("==> Epoch {:05d} | Test Loss {:.4f} | {:s} {:.4f}".format(
     #     epoch, total_loss / len(test_dataset), metric_name, total_result / len(test_dataset)))
 
-def load_file(args):
-    dataset = Tree_Dataset().generate_feature_dataset(args.data_source)
-    return dataset
+
+def evaluate_once(args, device, metric_list, metric_name, pretrained_emb, smt_vocab, task, test_dataset, trainer):
+    if args.model == "lstm" or args.model == "rnn":
+        dataset = test_dataset
+        test_loader = DataLoader(dataset=test_dataset,
+                                 batch_size=100,
+                                 collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold),
+                                 shuffle=False, num_workers=0)
+    elif args.model == "tree-lstm":
+        dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
+        test_loader = DataLoader(dataset=dataset,
+                                 batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
+    else:
+        dataset = test_dataset
+        test_loader = DataLoader(dataset=test_dataset,
+                                 batch_size=100,
+                                 collate_fn=feature_batcher(device, args.time_selection, task,
+                                                            args.threshold),
+                                 shuffle=False, num_workers=0)
+    print("test data:", len(test_dataset))
+    total_result, total_loss, pred_tensor, label_tensor = trainer.test(test_loader)
+    print("==> Test Loss {:.4f} | {:s} {:.4f}".format(
+        total_loss / len(dataset), metric_name, total_result))
+    metric_dic = {}
+    # metric_list = [metrics.accuracy, metrics.confusion_matrix, metrics.f1_score]
+    for m in metric_list:
+        metric_dic[m.__name__] = m(pred_tensor, label_tensor)
+    pred_tensor = [i.item() for i in pred_tensor]
+    label_tensor = [i.item() for i in label_tensor]
+    results = list(zip(pred_tensor, label_tensor))
+    # print(results)
+    return dataset, metric_dic, results, total_loss
 
 
-# feature extraction or load the saved dataset for training
+# def load_file(args):
+#     dataset = Tree_Dataset().generate_feature_dataset(args.data_source)
+#     return dataset
+
+
+# do feature extraction or load the saved dataset for training, return the list of data of corresponding feature
+# structure that split with program name
 def load_dataset(args):
     # choose feature dataset structure
     if args.model == "tree-lstm":
@@ -531,6 +401,13 @@ def load_dataset(args):
         treeforassert = "tree+feature" in args.input
         qd = dataset_type(feature_number_limit=feature_limit, treeforassert=treeforassert, save_address=train_file)
         dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
+        try:
+            ind = 0
+            while(os.path.exists(train_file + str(ind))):
+                dataset.extend(th.load(train_file + str(ind)))
+                ind = ind + 1
+        except IOError:
+            pass
         train_dataset, test_dataset = qd.split_with_filename(test_filename)
 
     if args.augment:
@@ -546,6 +423,8 @@ def load_dataset(args):
 
     if not os.path.isfile(train_file):
         th.save(dataset, train_file)
+    if len(train_dataset) == 0 or len(test_dataset) == 0:
+        exit(0)
     print("train data:", len(train_dataset), "test data:", len(test_dataset))
     args.test_filename = test_filename
     # del qd
@@ -575,11 +454,11 @@ def parse_arg():
     parser.add_argument('--regression', action='store_true', help="used for time prediction(regression), "
                         "not use for timeout constraint classification(classification)")
     parser.add_argument('--attention', action='store_true')
-    parser.add_argument('--load', action='store_true', help="model evaluation for programs")
-    parser.add_argument('--load_file', default='regression2_0.05', help="the path to model for evaluation")
+    parser.add_argument('--single_program', action='store_true', help="evaluation model with single programs")
+    parser.add_argument('--load_file', default=None, help="the path to model for evaluation")
     parser.add_argument('--single_test', action='store_true', help="test for single script, not maintained")
-    parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
-     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+    parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
+     "'original', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
     parser.add_argument('--augment', action='store_true', help="make you own augment, not maintained")
     parser.add_argument('--augment_path', default='data/gnucore/augment/crosscombine')
     parser.add_argument('--random_test', action='store_true', help="random separation for program for test")

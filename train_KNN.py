@@ -1,22 +1,16 @@
 import argparse
-import collections
 
 import json
 import os
-import time
-import random
 import numpy as np
-np.set_printoptions(suppress=True)
-import torch as th
-import torch.nn as nn
 
-from check_time import process_data, z3fun, getlogger
+from util import construct_data_from_json
+
+np.set_printoptions(suppress=True)
+# import torch as th
+
 from dgl_treelstm.KNN import KNN
-from dgl_treelstm.metric import Metrics
-from preprocessing import Tree_Dataset,Vocab,Constants,Vector_Dataset,op
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler,MinMaxScaler
-from sklearn.feature_extraction.text import TfidfTransformer
+from preprocessing import Vector_Dataset,op
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import warnings
@@ -42,8 +36,9 @@ def main(args):
     train_dataset = None
     if args.cross_project:
         train_dataset = data
-        output_dir = os.path.join(args.eva_input, 'gnucore_train')
-        test_dataset = th.load(output_dir)
+        output_dir = os.path.join(args.eva_input, 'train')
+        construct_data_from_json(output_dir)
+        # test_dataset = th.load(output_dir)
         data = test_dataset
     test_filename = list(set([x.filename for x in data]))
     if "smt-comp" in args.input:
@@ -52,13 +47,6 @@ def main(args):
     dataset = Vector_Dataset()
     dataset.fs_list = data
 
-    # output the predict data as json, allow the prediction from anywhere
-    # output = {
-    #     "x" : [i.feature.tolist() for i in data], "adjust" : [i.gettime("z3") for i in data],
-    #     "origin" : [i.gettime("origin") for i in data],"filename" : [i.filename for i in data]
-    # }
-    # with open("data/KNN_training_data/gnucore.json", "w") as f:
-    #     json.dump(output, f)
     # test_filename = ["expand"]
     total_num = 0
     incremental_total_result = []
@@ -232,23 +220,29 @@ def simple_KNN(args, test_dataset, train_dataset):
         y_test_pred = y_test_pred[reverse_index]
     return y_test_pred
 
-
 def load_dataset(args):
     dataset_type = Vector_Dataset
     output_dir = os.path.join( args.input)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     train_file = os.path.join(output_dir, 'train')
-    dataset = []
     if os.path.isfile(train_file):
-        train_dataset = th.load(train_file)
+        train_dataset = construct_data_from_json(train_file)
+        # train_dataset = th.load(train_file)
     else:
         qd = dataset_type(feature_number_limit=2)
         train_dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
 
     if not os.path.isfile(train_file):
-        th.save(train_dataset, train_file)
-    # del qd
+        #output the predict data as json, allow the prediction from anywhere
+        solver_selection = "z3" if args.time_selection == "original" else args.time_selection
+        output = {
+            "x" : [i.feature.tolist() for i in train_dataset], "adjust" : [i.gettime(solver_selection) for i in train_dataset],
+            "original" : [i.gettime("original") for i in train_dataset],"filename" : [i.filename for i in train_dataset]
+        }
+        with open(train_file, "w") as f:
+            json.dump(output, f)
+        # th.save(train_dataset, train_file)
     return train_dataset
 
 
@@ -258,8 +252,8 @@ def parse_arg():
     parser.add_argument('--data_source', default='gnucore/fv2', help="scripts saving directory")
     parser.add_argument('--input', default='gnucore/training', help="saving directory of feature after "
                             "extraction, avoid duplicate preprocess")
-    parser.add_argument('--time_selection', default='origin', help="the time label you want to use, allow "
-     "'origin', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+    parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
+     "'original', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
     parser.add_argument('--cross_project', action='store_true', help="default test use the program from same "
                         "dataset, use this option allow you to test program from other dataset")
     parser.add_argument('--eva_input', default='busybox/fv2', help="cross project test scripts saving directory")

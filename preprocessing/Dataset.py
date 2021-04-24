@@ -70,7 +70,7 @@ class Dataset:
                 try:
                     if script.solving_time_dic["z3"][0] < 0:
                         continue
-                    if not self.selected_file and len(self.script_filename_list) > 30000:
+                    if not self.selected_file and len(self.input_filename_list) > 35000:
                         if script.solving_time < 20 and script.solving_time_dic["z3"][0] < 10:
                             if ind % 10 != 0:
                                 continue
@@ -85,6 +85,7 @@ class Dataset:
                     self.script_filename_list.append(string.split("/")[-1])
                 except TimeoutError:
                     signal.alarm(0)
+                    # traceback.print_exc()
                     print("preprocess over time", len(self.fs_list))
                 except (KeyError, AttributeError):
                     traceback.print_exc()
@@ -214,10 +215,16 @@ class Dataset:
         for qt in self.fs_list:
             if qt.filename in test_filename:
                 test_dataset.append(qt)
-                if qt.gettime() >= 300:
+                if qt.gettime() >= 100:
                     tet += 1
             else:
                 train_dataset.append(qt)
-                if qt.gettime() >= 300:
+                if qt.gettime() >= 100:
                     trt += 1
+        if len(train_dataset) == 0:
+            print("split training data has no data")
+            # exit(0)
+        if len(test_dataset) == 0:
+            print("split testing data has no data")
+            # exit(0)
         return train_dataset, test_dataset

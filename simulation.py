@@ -10,6 +10,7 @@ import sys
 from torch.utils.data import DataLoader
 
 import Constants
+from util import construct_data_from_json
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.nn_models import *
 from dgl_treelstm.metric import *
@@ -69,7 +70,7 @@ class Simulation:
             iterator = iter(dataloader)
             data = next(iterator)
             feature = data.logic_tree
-            solve_time = data.gettime("origin")
+            solve_time = data.gettime("original")
         elif self.model_type == "LSTM":
             dataloader = DataLoader(dataset=[data], batch_size=1, collate_fn=pad_feature_batcher('cpu', 'original'),
                                          shuffle=False, num_workers=0)
@@ -79,7 +80,7 @@ class Simulation:
                                                            batch_first=True)
             solve_time = data.label
         else:
-            feature, solve_time = data.logic_tree, data.gettime("origin")
+            feature, solve_time = data.logic_tree, data.gettime("original")
         return feature, solve_time
 
     def predict(self, feature, truth):
@@ -141,7 +142,8 @@ class KNN_Simulation(Simulation):
         self.separate_test = False
 
     def load_model(self, input):
-        dataset = th.load(input)
+        # dataset = th.load(input)
+        dataset = construct_data_from_json(input)
         # test_filename = ["echo", "ginstall", "expr", "tail", "seq", "split", "test", "yes", "chgrp", "date", "expand",
         #                  "head", "nohup", "printf", "sha1sum", "stat", "timeout", "uniq", "nice", "pr"]
         # test_filename = ["expand"]
@@ -234,10 +236,11 @@ class TreeLSTM_Simulation(Simulation):
 
 # result saving structure
 class Evalution:
-    def __init__(self, pred=np.array([]), truth=np.array([])):
+    def __init__(self, pred=np.array([]), truth=np.array([]), time_out_setting=200):
         self.pred = self.get_numpy(pred)
         self.truth = self.get_numpy(truth)
         self.classify_result = np.array([])
+        self.time_out_setting = time_out_setting
 
     def get_numpy(self, data):
         if isinstance(data, th.Tensor):
@@ -252,10 +255,11 @@ class Evalution:
         self.classify_result = np.append(self.classify_result, self.get_numpy(classify_result))
 
     def score(self):
-        acc = accuracy_score(self.pred, self.classify_result)
-        pre = precision_score(self.pred, self.classify_result)
-        rec = recall_score(self.pred, self.classify_result)
-        f1 = f1_score(self.pred, self.classify_result)
+        truth = [1 if x > self.time_out_setting else 0 for x in self.truth]
+        acc = accuracy_score(truth, self.classify_result)
+        pre = precision_score(truth, self.classify_result)
+        rec = recall_score(truth, self.classify_result)
+        f1 = f1_score(truth, self.classify_result)
         return acc, pre, rec, f1
 
 # time calculation
@@ -303,10 +307,14 @@ def load_data(model, input):
         if "klee" in input:
             data_input = "data/klee/" + input.split("/")[-1] + model_name
             try:
-                dataset = th.load(data_input)
+                if model == "KNN":
+                    dataset = construct_data_from_json(data_input)
+                else:
+                    dataset = th.load(data_input)
             except (TypeError,FileNotFoundError):
                 dataset.generate_feature_dataset(input)
-                th.save(dataset, data_input)
+                if model != "KNN":
+                    th.save(dataset, data_input)
         else:
             dataset.generate_feature_dataset(input)
     return dataset.fs_list, input
@@ -494,10 +502,10 @@ def simulation_for_single_program(test_directory, args):
     input_index = args.input_index
     load_path = args.load_file
     # some setting process since all simulation use one entry
-    if args.classification:
+    if not args.regression:
         regression = False
-        input_list[int(input_index)] = input_list[int(input_index)].replace("_r_", "_c_")
     else:
+        input_list[int(input_index)] = input_list[int(input_index)].replace("_r_", "_c_")
         regression = True
     if model_name == "KNN":
         knn = KNN()
@@ -521,7 +529,7 @@ def simulation_for_single_program(test_directory, args):
         test_directory = input_list[int(input_index)]
     serial_data, test_input = load_data(model_name, test_directory)
     time_section = Time_Section()
-    result = Evalution()
+    result = Evalution(time_out_setting=args.threshold)
     # for cross project, identify dataset name
     dsn1 = identify_dataset(input_list[int(input_index)], None)
     dsn2 = identify_dataset(test_input, serial_data)
@@ -543,7 +551,7 @@ def simulation_for_single_program(test_directory, args):
         if model_name != "KNN" and regression and args.adapt:
             pass
             simulation.modify_threshold(predict_result, solve_time)
-        if not regression:
+        if model_name != "KNN" and not regression:
             pred = th.argmax(F.log_softmax(predict_result), 1)
             skip = pred == 1
             predict_result = 300 if skip else 0
@@ -563,8 +571,8 @@ def parse_arg():
                                 "hardcoded, not recommanded to change for use")
     parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
     "'original', 'adjust', the 'adjust' stand for 'z3' by now, modify when you experiment with other solver")
-    parser.add_argument('--classification', action='store_true', help="not used for time prediction(regression),"
-        "use for timeout constraint classification(classification)")
+    parser.add_argument('--regression', action='store_true', help="used for time prediction(regression),"
+        "not use for timeout constraint classification(classification)")
     parser.add_argument('--adapt', action='store_true', help="an adaptive time threshold for neural network "
         "models used for regression, because the predicted timeout threshold varies for different programs")
     parser.add_argument('--threshold', type=int, default=200, help="the timeout threshold for solving")

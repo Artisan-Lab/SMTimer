@@ -7,7 +7,7 @@ sys.setrecursionlimit(1000000)
 from preprocessing.feature_extraction import *
 
 class abstract_tree_extraction(feature_extractor):
-    # def __init__(self, script_info, time_selection="origin"):
+    # def __init__(self, script_info, time_selection="original"):
     #     query_tree.__init__(script_info, time_selection)
 
     def script_to_feature(self):
@@ -45,7 +45,7 @@ class abstract_tree_extraction(feature_extractor):
         for assertion in asserts:
             if "assert" not in assertion:
                 continue
-            if assertion.count("\n") > 40 or assertion.count("assert") > 1:
+            if assertion.count("\n") > 20 or assertion.count("assert") > 1:
                 asserts_bool.append(True)
             else:
                 asserts_bool.append(False)
@@ -78,8 +78,8 @@ class abstract_tree_extraction(feature_extractor):
             return
 
     def assertion_to_tree(self, command, assertion):
-        if assertion.count("\n") < 40 and assertion.count("assert") == 1:
-            root = self.fnode_to_tree(command.args[0], 20)
+        if assertion.count("\n") < 20 and assertion.count("assert") == 1:
+            root = self.fnode_to_tree(command.args[0], 10)
         else:
             val = list(map(lambda x: math.log(x + 1), self.count_feature(assertion)))
             root = vartree(val)
@@ -143,7 +143,7 @@ class abstract_tree_extraction(feature_extractor):
             fnode = assertion.args[0]
             while fnode.is_and():
                 if self.treeforassert:
-                    feature_list.append(self.fnode_to_tree(fnode.arg(1), 20))
+                    feature_list.append(self.fnode_to_tree(fnode.arg(1), 10))
                 # elif self.feature_number_limit != 2:
                 else:
                     # feature_list.append(self.fnode_to_feature(fnode.arg(1)))
@@ -152,7 +152,7 @@ class abstract_tree_extraction(feature_extractor):
                 #     pass
                 fnode = fnode.arg(0)
             if self.treeforassert:
-                feature_list.append(self.fnode_to_tree(fnode, 20))
+                feature_list.append(self.fnode_to_tree(fnode, 10))
             # elif self.feature_number_limit != 2:
             else:
                 # feature_list.append(self.fnode_to_feature(fnode))

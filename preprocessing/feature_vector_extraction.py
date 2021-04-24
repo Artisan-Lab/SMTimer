@@ -2,7 +2,7 @@ from preprocessing.abstract_tree_extraction import *
 import numpy as np
 
 class feature_vector_extraction(abstract_tree_extraction):
-    # def __init__(self, script_info, time_selection="origin"):
+    # def __init__(self, script_info, time_selection="original"):
     #     query_tree.__init__(script_info, time_selection)
 
     def script_to_feature(self):

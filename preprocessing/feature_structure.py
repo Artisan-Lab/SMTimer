@@ -21,9 +21,9 @@ class AST:
             self.filename = filename
         self.feature_sum = feature_tree.feature
 
-    def gettime(self, time_selection="origin"):
+    def gettime(self, time_selection="original"):
         try:
-            if time_selection == "origin":
+            if time_selection == "original":
                 return self.origin_time
             else:
                 return self.adjust_time
@@ -33,6 +33,13 @@ class AST:
 
 class FV:
     def __init__(self, feature_vector, filename=None):
+        if feature_vector == None:
+            self.feature = None
+            self.origin_time = None
+            self.adjust_time = None
+            self.feature_sum = None
+            self.filename = None
+            return
         self.feature = feature_vector.feature_list
         self.origin_time = feature_vector.origin_time
         self.adjust_time = feature_vector.adjust_time
@@ -43,9 +50,15 @@ class FV:
         # self.feature = [math.log(x + 1) for x in feature_vector.feature]
         self.feature_sum = feature_vector.feature
 
-    def gettime(self, time_selection="origin"):
+    def from_json(self, feature, origin_time, adjust_time, filename):
+        self.feature = feature
+        self.origin_time = origin_time
+        self.adjust_time = adjust_time
+        self.filename = filename
+
+    def gettime(self, time_selection="original"):
         try:
-            if time_selection == "origin":
+            if time_selection == "original":
                 return self.origin_time
             else:
                 return self.adjust_time
@@ -56,6 +69,8 @@ class FV:
 class FV2(FV):
     def __init__(self, feature_vector, filename=None):
         FV.__init__(self, feature_vector, filename)
+        if feature_vector == None:
+            return
         feature_list = self.feature
         if len(feature_list) == 2:
             self.feature = feature_list.flatten()

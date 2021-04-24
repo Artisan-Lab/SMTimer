@@ -79,7 +79,7 @@ class Script_Info:
 
 # main preprocessing, parse the SMT scripts to give out abstract tree or feature vector for later prediction
 class feature_extractor:
-    def __init__(self, script_info, time_selection="origin", limit=100):
+    def __init__(self, script_info, time_selection="original", limit=100):
         self.feature_list = []
         self.logic_tree = None
         self.val_list = []

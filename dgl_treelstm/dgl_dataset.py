@@ -9,7 +9,7 @@ from torch import nn
 SMTBatch = namedtuple('SMTBatch', ['graph', 'wordid', 'label'])
 
 class dgl_dataset(object):
-    def __init__(self, data, embedding, vocab=None, task="regression", time_selection="origin"):
+    def __init__(self, data, embedding, vocab=None, task="regression", time_selection="original"):
         self.trees = []
         self.task = task
         self.time_selection = time_selection

@@ -2,8 +2,11 @@
 
 # get the solving time for single SMT scripts from the input directory, this step is mainly because the solving time is unstable inside symbolic execution, we need the label to be accurate for later prediction
 # noting that: this step is extramely time-consuming, so if you just want to see the result of prediction, you could skip this file and use the data we collected
-python check_time.py --input data/example/arch
+python check_time.py --input data/gnucore/single_test
 
 # add the solving time to the SMT script in json structure for later use
-python merge_check_time.py --script_input data/example/arch
+python merge_check_time.py --script_input data/gnucore/single_test
 
+# We are trying to make a smaller dataset for a fast example, may be used in the future
+# python check_time.py --input data/example/arch
+# python merge_check_time.py --script_input data/example/arch

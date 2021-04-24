@@ -114,7 +114,7 @@ class Trainer(object):
             #     print(th.transpose(th.cat((pred, batch_label)).reshape(2,-1), 0, 1))
         self.pred_tensor, self.label_tensor = pred_tensor, label_tensor
         total_result = self.cal_metrics_result(total_result, dataset_len)
-        return total_result, total_loss
+        return total_result, total_loss, pred_tensor, label_tensor
 
 
 class LSTM_Trainer(object):
@@ -221,4 +221,4 @@ class LSTM_Trainer(object):
             #     print(th.transpose(th.cat((pred, batch_label)).reshape(2,-1), 0, 1))
         self.pred_tensor, self.label_tensor = pred_tensor, label_tensor
         total_result = self.cal_metrics_result(total_result, dataset_len)
-        return total_result, total_loss
+        return total_result, total_loss, pred_tensor, label_tensor
