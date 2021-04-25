@@ -1,13 +1,18 @@
-SMT solving is a bottleneck for the symbolic execution. SMTimer provides a time prediction for SMT script solving for a certain solver(in our case `z3`). With the predicted solving time, symbolic execution can choose the path with lower time to explore first, or directly skip the timeout cases without wasting time on it.
-
-Still try to make a small dataset for get started.
+SMT solving is a bottleneck for the symbolic execution. SMTimer provides a time prediction for SMT script solving for a certain solver(in our case `z3`). With the predicted solving time, symbolic execution can choose the path with lower time to explore first, or directly skip the timeout cases without wasting time on them.
 
 # Get started
-The meaning for output are not very detail in this part, for more information, please read the `Detail description`.
+To get started, we demonstrate the process based on a small example. For more information of the meaning for output, please read the `Detail description`.
 
-## Collected data sharing
-Our collected data is available on <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets. We use the constraint model generated with GNU Coreutils(angr) as example. 
-First put the data in certain path.
+## Build environment 
+You can build the environment with pip. For detail, the building dependencies include numpy, torch, sklearn, keras, dgl, pysmt, EasyProcess, matplotlib.
+
+`pip install -r requirements.txt`
+
+
+## Collected data
+Our collected data is available on <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets. For getting started, we use a small subset of the constraint models generated with GNU Coreutils(angr) . You can find the SMT files in `data/example/single_test`. 
+
+If you want to use the whole dataset, please download it and put the data in certain path.
 ```
 mkdir data/gnucore
 cd data/gnucore
@@ -15,108 +20,131 @@ cd data/gnucore
 tar -xcvf gnu-angr.tar.gz .
 ``` 
 
-After you get the data, we recommand you to put the SMT files in the `data/{dataset}/single_test` directory, this is not forced, but the scripts are based on fixed relative path.
+After you get the data, we recommend you to put the SMT files in the `data/{dataset}/single_test` directory, this is not forced, but the scripts are based on fixed relative path.
 
-## SMT solving(optional, time-consuming, about one day long for each dataset)
+## SMT solving(optional, time-consuming, about half hour long for example)
 
- The data we provided have already done this part for you. But you can use this command to solve the script and add the solved time into your script by your own.
+ Considering the time budget, the data we provided have already done this part for you. But you can use this command to solve the script and add the solved time into your script on your own.
 ```
 pysmt-install --check
 pysmt-install --z3
-source SMTsolving.sh
+source SMTsolving.sh example
 ```
 
-After using this command you can see that the solving time of the scripts, also saved in the `adjustment.log`, and the time after adjustment has been added into script with the key of `solving_time_dic`. There is a item named `z3` in `solving_time_dic`.
+Screen outputs: you can see that the solving time of the SMT scripts.
 
-## neural network (non-adaptive approach, cost about 15 minutes)
-As example, we use our GNU coreutil dataset to train LSTM classification model, You can run the script. 
+Saved results: the solving time are also saved in the `adjustment.log`. The time after adjustment has been added into SMT scripts in the field `solving_time_dic`. You can get it from the dictionary with key `z3`.
+
+## neural network (non-adaptive approach, cost about 7-8 minutes)
+As example, we use our GNU coreutil dataset subset to train LSTM regression model, You can run the script. 
 ```
-mkdir checkpoints, simulation_result
-source run_NN_model.sh
+mkdir checkpoints simulation_result
+source run_NN_model.sh example
 ```
-After using this command you can see the the processed data number first, then the training process on your screen for the first command in the script. Then the prediction of test dataset and more measurement result for second command. And a simulation result for program `arch` for last command. The model and evaluation result are saved in `checkpoints` if you want to examine it and use the model. The simulation result are saved in `simulation_result`.
+Screen outputs: 
++ the processed SMT scripts number first, then the neural network training process on your screen
++ the prediction of test dataset and more measurement result
++ a simulation result for program `arch`
+Saved results: 
++ the model and evaluation result are saved in `checkpoints` directory if you want to examine it and use the model. 
++ the simulation result are saved in `simulation_result` directory.
 
-## increment-KNN (adaptive approach, cost about 10 minutes)
+## increment-KNN (adaptive approach, cost about 2-3 minutes)
 
-As example, we use our GNU coreutil dataset to train incremental-KNN classification model. You can run the script. 
+As example, we use our GNU coreutil dataset subset to train incremental-KNN classification model. You can run the script. 
 
-`source run_KNN.sh`
+`source run_KNN.sh example`
 
-After using this command you can see the the processed data number first, then the prediction measurement result on your screen for the first command in the script. And a simulation result for program `arch` for second command. Similarly, the simulation result are saved in `simulation_result`.
+Screen outputs: 
++ the processed data number first, then the prediction measurement result on your screen
++ a simulation result for program `arch`
+Saved results:
++ the feature vector dataset for reuse in `data/example/pad_feature`
++ the simulation result are saved in `simulation_result` directory.
 
 # Detail description
 The following instruction would tell you how our most modules work. So you can change the setting or replay the experiment result. 
 
 ## Data collection
-The data collection is not constructed in current project environment, but we still give out our SMT constraint model collection module, you may construct it by your own. All the files are located in `data_collection` directory.
+The data collection is not constructed in current project environment, but we still give out our SMT constraint model collection module, you may construct it on your own. All the files are located in `data_collection` directory.
 
 ## Collected data sharing
 Our collected data is available on <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets, which are constraint models generated with GNU Coreutils using angr and KLEE, BusyBox using angr and from SMT-comp. You may get more information about the SMT competitions from <https://smt-comp.github.io/2020/>, we use this dataset(non-increment,QF_BV) in our experiment. To download original data, the address is <https://www.starexec.org/starexec/secure/explore/spaces.jsp?id=404954>. Our script specifically handle its file names so it's hard to use original data. So we release data of our version with solving time for this dataset so you can replay our prediction result. We may refactor the processing to match the name setting for this dataset if we are free.
 
 #### data selection
-The training data is heavily imbalanced, we conduct a random undersampling to contain fewer fast-solving cases. So the result is a little different for different selection.
+The training data is heavily imbalanced, we conduct a random under-sampling to contain fewer fast-solving cases. So the result is a little different for different selection.
 
-## SMT solving(optional, time-consuming)
-This step is optional since it is time-consuming. You may directly use the solving time we solve with z3. If you want to use other SMT solvers or make sure the label is consistent with your setting, you can solve it by yourself. Because the time would be affected by many factors like runtime environment and parallel situation. We use the pySMT to solve so make sure you install the solver first.
+## SMT solving(optional, time-consuming, about one day long for each dataset)
+This step is optional since it is time-consuming. You may directly use the solving time we solve with z3. If you want to use other SMT solvers or make sure that the label is consistent with your setting, you can solve it by yourself. Because the time would be affected by many factors like runtime environment and parallel situation. We use the pySMT to solve so make sure you install the solver first.
 
 ```
 pysmt-install --check
 pysmt-install --z3
 ```
 
-You can use this command to solve the script and add the solved time into your script. You may find the detail setting in `check_time.py`, `solve.py`, you need to change the logic in `solve` if you want to use other reasoning theories.
+You can use this script to solve the SMT scripts and add the solving time into your SMT files. You may find the detail setting in `check_time.py`, `solve.py`. You need to change the logic in `solve` if you want to use other reasoning theories.
 
 `source SMTsolving.sh`
 
 ## neural network (non-adaptive approach)
 
-The neural network is the non-adaptive way. You may skip this part as well if you are only interested in the adaptive approach(incremental_KNN). We mainly present this result for comparision.
+The neural network is a non-adaptive way for the solving time inference problem. You may skip this part as well if you are only interested in the adaptive approach(incremental_KNN). We mainly present this result for comparision and replay experiment results.
 
-The neural network models train with features after extraction, first make some directory that is needed,
+First make some directories that is needed,
 
 ```
-mkdir checkpoints, simulation_result, data
+mkdir checkpoints simulation_result
 ``` 
 
-As example, we use our GNU coreutil dataset to train LSTM classification model. The script in `get started` does three work. First it train the model, secondly it represents more results for the model, thirdly you can see the simulation result of program `arch` with the model you used.
+For example, we use GNU coreutil dataset to train LSTM regression model. The script in `get started` does three work. First it train the model, secondly it evaluates the model, thirdly it runs a simulation for program `arch` with the model you used.
 
-Next, we introduce the command separatedly for better explanation.
-
-The `train.py` includes the feature extraction, neural network training and some evaluation. The result of feature extraction would be saved in the path of `input`, so you can reuse the feature of SMT scripts. We do not provide this middle result because the data size is too large. After training, the model would be saved in `checkpoints` directory, the model name is composed of `dataset_input_model_time-type_task_threshold_index.pkl`. For tree-LSTM, our model use the feature vector instead of abstract tree by default, which makes it functionally works like LSTM. But you may use "tree+feature" as input directory to use abstract tree. To make it more practicable, we make some induction, which replaces oversized abstract trees into vectors. Our results suggest the improvement does not worth the cost. If you want to further use the tree structure, you could work on it in `preprocessing/abstract_tree_extraction.py`.
+Next, we introduce the command separately for better explanation.
+####training
+The `train.py` does the feature extraction, neural network training and some evaluations. The result of feature extraction would be saved in the path of `input`, so you can reuse the feature of SMT scripts. We do not provide this middle result because the data size is too large. After training, the model would be saved in `checkpoints` directory, the model name is in the format of `dataset_input_model_time-type_task_threshold_index.pkl`.
 
 `python train.py --data_source data/gnucore/single_test --input data/gnucore/pad_feature --model lstm --time_selection z3 --threshold 200 --regression`
 
- To further use other models or see the regression result, you may use different command line argument. The help information should guide you the usage. We explain some of them for experiment replay.
+ To further use other models or see the classification result, you may use different command line argument. The help information should guide you the usage. We explain some of them for experiment replay.
 
 + --model lstm/tree-lstm/dnn, we support three models including LSTM, tree-LSTM, DNN.
 + --regression, we support the time prediction(regression) and timeout constraint classification(classification)
 
-You can check the trained model with the same file using `load_file` options, the other setting should be the same as the last command. The result would also be saved in `checkpoints` directory, the result name is composed of `dataset_evaulation_task_index.pkl`. The result includes more evaluation measurement results amd the predict result for you selected test dataset.
+ For tree-LSTM, our model uses the feature vector instead of abstract tree by default, which makes it functionally works like LSTM. But you may use "tree+feature" as input directory to use abstract tree. To make it more practicable, we make some inductions, which replace oversized abstract trees into vectors. Our results suggest the improvement does not worth the cost. If you want to further research with  the tree structure, you could work on it in `preprocessing/abstract_tree_extraction.py`.
+ 
+####evaluation
+You can check the trained model with the same file using `load_file` options, the other setting should be the same as the last command. The evaluation result includes more measurement results (e.g. mae for regression, precision,recall,f1_score,confusion_matrix for classification) and the predict result for you selected test dataset. The result would also be saved in `checkpoints` directory, the result name is in the format of  `dataset_evaulation_task_index.pkl`.
 
 `python train.py --input data/gnucore/pad_feature --load_file g_pad_feature_l_z_r_200_1 --model lstm --time_selection z3 --regression`
 
-Then, we evaluate the solving time with our purposed system in simulation. You can see the data that predicted wrongly, original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold(pos_num), and tp, fn, fp cases numbers, also the classification measurement results for prediction(regression result would be classified with you setting threshold).
+####simulation
+Then, we simulate the solving time with our purposed system with the Eq.(1),(2). The screen output show the data that predicted wrongly, and the simulation results shown in Table.6, which include original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold(pos_num), and tp, fn, fp cases numbers, also the classification measurement results for prediction(regression result would be classified with you setting threshold).
 
 `python simulation.py --model_name lstm --load_file checkpoints/g_pad_feature_l_z_r_200_1.pkl --test_directory data/gnucore/single_test/arch --time_selection adjust --regression`
 
 ## increment-KNN (adaptive approach)
 
-Like the neural network model, the KNN extracts features, we support two main setting including KNN implemented in sklearn(non-adaptive so poor in performance,better in efficiency), incremental-KNN. As example, we use our GNU coreutil dataset to train incremental-KNN classification model. The script in `get started` does two jobs. First it represents the prediction results for every program, next you can see the simulation result of program `arch`.
+The increment-KNN is based on the concept of online learning. It adaptively update the model with test constraints.
 
-Next, we introduce the command separatedly for better explanation.
+For example, we use our GNU coreutil dataset to train incremental-KNN classification model. The script in `get started` does two jobs. First it represents the prediction results for every program, next it runs a simulation for program `arch`.
 
-The `train_KNN.py` includes the feature extraction and KNN evaluation. The result of feature extraction would be saved in the path of `input`, so you can reuse the feature of scripts. We only provide this result for GNU(angr) in json structure in `KNN_training_data` directory, which is also used in our KNN predictor for symbolic execution tools. You can use it with `--input KNN_training_data/gnucore.json`.
+Next, we introduce the command separately for better explanation.
+
+####training and evaluation
+The `train_KNN.py` does the feature extraction and KNN evaluation. The result of feature extraction would be saved in the path of `input`, so you can reuse the feature of scripts. We only provide the result for GNU(angr) in json structure in `KNN_training_data` directory, which is also used in our KNN predictor for symbolic execution tools. You can use it with `--input KNN_training_data/gnucore.json`. You should get the result in Table.2 and get a more detailed result for single programs.
 
 `python train_KNN.py --data_source data/gnucore/single_test --input data/gnucore/fv2_serial --time_selection z3 --time_limit_setting 200 --model_selection increment-knn`
 
+ We support two main setting including KNN implemented in sklearn(non-adaptive so poor in performance,better in efficiency, mainly for comparision), incremental-KNN. You may use different command line argument. 
+ 
+####simulation
 The following description are the same as the neural network simulation. Just in case you skip neural network part, we repeat the description.
 
-Then, we evaluate the solving time with our purposed system in simulation. You can see the data that predicted wrongly, original solving time, solving time after boosting(total_time), timeout contraints number with your setting threshold(pos_num), and tp, fn, fp cases numbers, also the classification metric for prediction.
+Then, we simulate the solving time with our purposed system with the Eq.(1),(2). The screen output show the data that predicted wrongly, and the simulation results shown in Table.6, which include original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold(pos_num), and tp, fn, fp cases numbers, also the classification measurement results for prediction
 
 `python simulation.py --model_name KNN --load_file data/gnucore/fv2_serial/train --test_directory data/gnucore/single_test/arch --time_selection adjust`
 
 ## use of the prediction
-To use the tool, you can use the `KNN_Predictor.py` from the home directory, take `angr` with `z3` solver backend as example, you need to replace the solving `result = solver.check()` like:
+To use our predictor as a tool, you can use the `KNN_Predictor.py` from the home directory. Taking `angr` with `z3` solver backend as example, you need to replace the solving `result = solver.check()` like:
 ```
 # set the solve time with t1=1s
 solver.set('timeout', 1000)
@@ -142,3 +170,4 @@ if result == z3.unknown:
             # prediction right
             predictor.increment_KNN_data(0)
 ```
+This is a code representation of our predictor architecture interacting with symbolic execution tool angr.

@@ -98,6 +98,7 @@ class Dataset:
                 for i in selected_filename:
                     f.write(i + "\n")
         del self.script_list
+        print("feature extraction finished.")
         return self.fs_list
 
     def print_and_write(self, output_ind):

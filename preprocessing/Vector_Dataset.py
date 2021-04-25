@@ -6,7 +6,7 @@ class Vector_Dataset(Dataset):
 
     def print_and_write(self, output_ind):
         if len(self.fs_list) % 500 == 0:
-            print(len(self.fs_list))
+            print("processed script number:" + str(len(self.fs_list)))
 
     def parse_data(self, script, time_selection):
         featurevectors = feature_vector_extraction(script, time_selection, self.feature_number_limit)

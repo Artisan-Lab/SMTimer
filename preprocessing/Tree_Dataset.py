@@ -13,7 +13,7 @@ class Tree_Dataset(Dataset):
 
     def print_and_write(self, output_ind):
         if len(self.fs_list) % 500 == 0:
-            print(len(self.fs_list))
+            print("processed script number for file" + str(output_ind) + ":" + str(len(self.fs_list)))
             gc.collect()
         if len(self.fs_list) == 5000:
             th.save(self.fs_list, self.save_address + str(output_ind))
