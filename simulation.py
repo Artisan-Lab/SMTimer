@@ -9,7 +9,7 @@ import sys
 # from matplotlib import pyplot
 from torch.utils.data import DataLoader
 
-import Constants
+import preprocessing.Constants
 from util import construct_data_from_json
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.nn_models import *
@@ -298,7 +298,7 @@ def load_data(model, input):
         dataset = Tree_Dataset(feature_number_limit=100)
     if "smt-comp" in input:
         dataset.fs_list = th.load(input)
-        test_filename = "mcm"
+        test_filename = input.split("/")[-1]
         test_filename1 = [x.filename for x in dataset.fs_list]
         test_file = list(filter(lambda x:x.split("_")[0] == test_filename, test_filename1))
         dataset.fs_list = dataset.split_with_filename(test_file)[1]
@@ -484,11 +484,11 @@ def choose_input(dataset, input, load_path):
     if os.path.exists(load_path):
         return load_path
     if input in f1:
-        load_path = ".".join([load_path.split(".")[0] + "_1", load_path.split(".")[1]])
+        load_path = ".".join([load_path.split(".")[0] + "_0", load_path.split(".")[1]])
     elif input in f2:
-        load_path = ".".join([load_path.split(".")[0] + "_2", load_path.split(".")[1]])
+        load_path = ".".join([load_path.split(".")[0] + "_1", load_path.split(".")[1]])
     elif input in f3:
-        load_path = ".".join([load_path.split(".")[0] + "_3", load_path.split(".")[1]])
+        load_path = ".".join([load_path.split(".")[0] + "_2", load_path.split(".")[1]])
     else:
         load_path = ""
     return load_path

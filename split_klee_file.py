@@ -2,6 +2,7 @@ import json
 import os
 import traceback
 
+# KLEE SMT scripts are collected in one file, separate them into single files
 for root,dir,files in os.walk("data/klee/raw"):
     for file in files:
         if file == "solver-queries.smt2":

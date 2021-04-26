@@ -131,7 +131,7 @@ class LSTM_Trainer(object):
         self.pred_tensor, self.label_tensor = None, None
 
     def cal_metrics_result(self, metric_result, dataset_len):
-        if self.args.regression:
+        if self.args.regression or isinstance(metric_result, float):
             result = metric_result / dataset_len
         else:
             confusion_matrix = metric_result

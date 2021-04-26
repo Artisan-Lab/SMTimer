@@ -1,6 +1,6 @@
 import json
 
-from feature_structure import FV2
+from preprocessing.feature_structure import FV2
 from preprocessing import Vector_Dataset
 
 

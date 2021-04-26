@@ -135,9 +135,9 @@ def main(args):
         task = "regression"
         metric_list = [metrics.mse, metrics.mae, metrics.pearson]
     else:
-        metric_name = "f1_score"
+        metric_name = "Accuracy"
         criterion = nn.CrossEntropyLoss(reduction='sum')
-        metric = metrics.accuracy
+        metric = metrics.right_num
         best_dev_metric = -1
         task = "classification"
         metric_list = [metrics.right_num, metrics.confusion_matrix, metrics.f1_score]
@@ -201,8 +201,10 @@ def main(args):
             print(item)
         # print(checkpoint)
         dir = args.load_file[0]
-        th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([dir, 'evaluation',
-               "r" if args.regression else "c" , None if args.cross_index < 0 else str(args.cross_index + 1)])))
+        model_name = '_'.join([dir, 'evaluation', "r" if args.regression else "c"])
+        if args.cross_index >= 0:
+            model_name = '_'.join([model_name, str(args.cross_index)])
+        th.save(checkpoint, 'checkpoints/{}.pkl'.format(model_name))
         return
 
     if args.model == "tree-lstm":
@@ -272,12 +274,14 @@ def main(args):
                 checkpoint_name = name_list[-1]
             mt = "r" if args.regression else "c"
             ts = str(args.threshold)
-            th.save(checkpoint, 'checkpoints/{}.pkl'.format('_'.join([dataset_name, checkpoint_name, args.model[0],
-                            args.time_selection[0], mt, ts, None if args.cross_index < 0 else str(args.cross_index + 1)])))
-        else:
-            if best_epoch <= epoch - 20:
-                break
-            pass
+            model_name = '_'.join([dataset_name, checkpoint_name, args.model[0], args.time_selection[0], mt, ts])
+            if args.cross_index >= 0:
+                model_name = '_'.join([model_name, str(args.cross_index)])
+            th.save(checkpoint, 'checkpoints/{}.pkl'.format(model_name))
+        # else:
+        #     if best_epoch <= epoch - 20:
+        #         break
+        #     pass
 
         # lr decay
         for param_group in optimizer.param_groups:
@@ -398,7 +402,7 @@ def load_dataset(args):
             train_dataset, test_dataset = qd.split_with_filename(test_filename)
             # train_dataset = train_dataset + test_dataset
     else:
-        treeforassert = "tree+feature" in args.input
+        treeforassert = args.tree_for_assert
         qd = dataset_type(feature_number_limit=feature_limit, treeforassert=treeforassert, save_address=train_file)
         dataset = qd.generate_feature_dataset(args.data_source, args.time_selection)
         try:
@@ -459,6 +463,8 @@ def parse_arg():
     parser.add_argument('--single_test', action='store_true', help="test for single script, not maintained")
     parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
      "'original', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+    parser.add_argument('--tree_for_assert', action='store_true', help="true to use abstract trees as tree nodes"
+                "in tree-LSTM model")
     parser.add_argument('--augment', action='store_true', help="make you own augment, not maintained")
     parser.add_argument('--augment_path', default='data/gnucore/augment/crosscombine')
     parser.add_argument('--random_test', action='store_true', help="random separation for program for test")
