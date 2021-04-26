@@ -9,7 +9,7 @@ import sys
 # from matplotlib import pyplot
 from torch.utils.data import DataLoader
 
-import preprocessing.Constants
+from preprocessing import Constants
 from util import construct_data_from_json
 from dgl_treelstm.KNN import KNN
 from dgl_treelstm.nn_models import *
@@ -428,20 +428,33 @@ def make_output(dsn1, dsn2, input, simulation, result, time_section, output_resu
     pre = precision_score(truth, result.classify_result)
     rec = recall_score(truth, result.classify_result)
     f1 = f1_score(truth, result.classify_result)
-    print_output = {"train_dataset": dsn1, "test_dataset": dsn2, "pred_truth_diff_tuple": pred_truth_tuple,
-                    "original_time": time_section.original_time,
-                    "predict_time":time_section.predict_time + time_section.preprocessing_time,
-                    "total_time": time_section.final_time, "input":input, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
+    confusion_matrix = np.zeros((2, 2))
+    for t, p in zip(truth, result.classify_result):
+        confusion_matrix[t][int(p)] += 1
+    # print_output = {"train_dataset": dsn1, "test_dataset": dsn2, "pred_truth_diff_tuple": pred_truth_tuple,
+    #                 "original_time": time_section.original_time,
+    #                 "predict_time":time_section.predict_time + time_section.preprocessing_time,
+    #                 "total_time": time_section.final_time, "input":input, "pos_num":sum(truth), "tp": sum(truth)*rec,
+    #                 "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
+    print_output = {"timeout_query_num":sum(truth), "true-positive number": confusion_matrix[1][1],
+                    "false-negative number": confusion_matrix[1][0], "false-positive number": confusion_matrix[0][1]}
     output = {"train_dataset": dsn1, "test_dataset": dsn2, "predicted_solving_time": result.pred.tolist(),
               "acutal_solving_time": result.truth.tolist(), "original_time": time_section.original_time, "predict_time":
               time_section.predict_time + time_section.preprocessing_time, "total_time": time_section.final_time,
               "metrics":{"acc": acc, "pre": pre, "rec": rec, "f1": f1}, "time_out_setting": simulation.time_out_setting,
-              "model":simulation.model_type, "input":input, "pos_num":sum(truth), "tp": sum(truth)*rec,
-                    "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
+              "model":simulation.model_type, "input":input, "pos_num":sum(truth), "tp": confusion_matrix[1][1],
+                    "fn": confusion_matrix[1][0], "fp": confusion_matrix[0][1]}
     if not len(result.truth):
         return
     output = json.dumps(output, indent=4)
+    print("train dataset:" + dsn1)
+    # print("test dataset:" + dsn2)
+    print("test program:" + input)
+    print("prediction truth difference tuple(index, predict result, truth, classification result):")
+    print(pred_truth_tuple)
+    print("original solving time:" + str(int(time_section.original_time)) + "s")
+    print("predict_time:" + str(int(time_section.predict_time + time_section.preprocessing_time)) + "s")
+    print("solving time with the predictor:" + str(int(time_section.final_time)) + "s")
     print(print_output)
     print('test accuracy: {:.3}, precision: {:.3}, recall: {:.3}, f1 score: {:.3}'.format(acc, pre, rec, f1))
     # if simulation.model_type != 'KNN':
@@ -582,6 +595,8 @@ def parse_arg():
     parser.add_argument('--epochs', type=int, default=40)
     parser.add_argument('--num_classes', type=float, default=2)
     args = parser.parse_args()
+    print()
+    print("Simulation start:")
     print(args)
     return args
 

@@ -19,7 +19,6 @@ from torch.utils.data import DataLoader
 
 import dgl
 from check_time import process_data, z3fun, getlogger
-from dgl.data.tree import SSTBatch
 from dgl_treelstm.trainer import Trainer,LSTM_Trainer
 from dgl_treelstm.nn_models import TreeLSTM, LSTM, RNN, DNN
 from dgl_treelstm.metric import Metrics

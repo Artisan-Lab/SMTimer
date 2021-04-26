@@ -51,5 +51,4 @@ smart-open==1.11.1
 torch==1.4.0
 tqdm==4.43.0
 urllib3==1.25.8
-yicespy==2.5.1.200519
 z3-solver==4.8.7.0
