@@ -136,7 +136,7 @@ def main(args):
     else:
         metric_name = "Accuracy"
         criterion = nn.CrossEntropyLoss(reduction='sum')
-        metric = metrics.right_num
+        metric = metrics.confusion_matrix
         best_dev_metric = -1
         task = "classification"
         metric_list = [metrics.right_num, metrics.confusion_matrix, metrics.f1_score]

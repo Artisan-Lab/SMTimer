@@ -253,7 +253,7 @@ def parse_arg():
     parser.add_argument('--input', default='gnucore/training', help="saving directory of feature after "
                             "extraction, avoid duplicate preprocess")
     parser.add_argument('--time_selection', default='original', help="the time label you want to use, allow "
-     "'original', 'z3', more type need data from different solvers e.g., 'msat', you may collect by your own")
+     "'original', 'z3', more type need data from different solvers e.g., 'msat', you may collect on your own")
     parser.add_argument('--cross_project', action='store_true', help="default test use the program from same "
                         "dataset, use this option allow you to test program from other dataset")
     parser.add_argument('--eva_input', default='busybox/fv2', help="cross project test scripts saving directory")

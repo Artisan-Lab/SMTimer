@@ -43,7 +43,7 @@ class Dataset:
         self.save_address = save_address
 
     # read data from file directory or script, preprocess scripts into abstract trees
-    def generate_feature_dataset(self, input, time_selection=None):
+    def generate_feature_dataset(self, input, time_selection=None, fileprefix=None):
         self.script_list = []
         if isinstance(input, list):
             self.script_list = input
@@ -52,7 +52,7 @@ class Dataset:
             self.script_list = [input]
             self.input_filename_list = [""]
         else:
-            self.load_from_directory(input)
+            self.load_from_directory(input, fileprefix)
             if "klee" in input:
                 self.klee = True
             if len(self.input_filename_list) == 0:
@@ -68,10 +68,14 @@ class Dataset:
             for script_string in self.script_list:
                 script = Script_Info(script_string, self.is_json)
                 try:
-                    if script.solving_time_dic["z3"][0] < 0:
+                    if time_selection != "original":
+                        check_time_selection = time_selection
+                    else:
+                        check_time_selection = "z3"
+                    if script.solving_time_dic[check_time_selection][0] < 0:
                         continue
                     if not self.selected_file and len(self.input_filename_list) > 35000:
-                        if script.solving_time < 20 and script.solving_time_dic["z3"][0] < 10:
+                        if script.solving_time < 20 and script.solving_time_dic[check_time_selection][0] < 10:
                             if ind % 10 != 0:
                                 continue
                     selected_filename.append(string.split("/")[-1])
@@ -138,7 +142,7 @@ class Dataset:
 
     # only accept files with single script or specific design of KLEE "QF_AUFBV", to avoid running out of memory
     # we only record the input file name into
-    def load_from_directory(self, input):
+    def load_from_directory(self, input, fileprefix=None):
         if not input or input == "":
             return
         if os.path.isdir(input):
@@ -152,6 +156,10 @@ class Dataset:
             for root, dirs, files in os.walk(input):
                 files.sort(key=lambda x: (len(x), x))
                 for file in files:
+                    if fileprefix != None:
+                        if file.startswith(fileprefix):
+                            self.input_filename_list.append(os.path.join(root, file))
+                        continue
                     if selected_file and file not in selected_file:
                         continue
                     if file.endswith("txt"):

@@ -297,14 +297,19 @@ def load_data(model, input):
     else:
         dataset = Tree_Dataset(feature_number_limit=100)
     if "smt-comp" in input:
-        dataset.fs_list = th.load(input)
         test_filename = input.split("/")[-1]
-        test_filename1 = [x.filename for x in dataset.fs_list]
-        test_file = list(filter(lambda x:x.split("_")[0] == test_filename, test_filename1))
-        dataset.fs_list = dataset.split_with_filename(test_file)[1]
+        input = "/".join(input.split("/")[:-1])
+        dataset.fs_list = dataset.generate_feature_dataset(input, fileprefix=test_filename)
+        if len(dataset.fs_list) == 0:
+            print("smt-comp file are not separated with filename, but please use the similar structure, more information in simulation_smt-comp.md")
+        # test_filename1 = [x.filename for x in dataset.fs_list]
+        # test_file = list(filter(lambda x:x.split("_")[0] == test_filename, test_filename1))
+        # dataset.fs_list = dataset.split_with_filename(test_file)[1]
         input = input + "/" + test_filename
     else:
         if "klee" in input:
+            # the klee processing is time-consuming because of the SMT scripts structure, so we saved the result for next time
+            # for other dataset we extract feature every time it simulates.
             data_input = "data/klee/" + input.split("/")[-1] + model_name
             try:
                 if model == "KNN":
