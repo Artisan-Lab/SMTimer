@@ -10,7 +10,7 @@ You can build the environment with pip. For detail, the building dependencies in
 
 
 ## Collected data
-Our collected data is available on <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets. For getting started, we use a small subset of the constraint models generated with GNU Coreutils(angr) . You can find the SMT files in `data/example/single_test`. 
+Our collected data is available on <https://doi.org/10.5281/zenodo.4722615> and <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets. For getting started, we use a small subset of the constraint models generated with GNU Coreutils(angr) . You can find the SMT files in `data/example/single_test`. 
 
 If you want to use the whole dataset, please download it and put the data in certain paths.
 ```
@@ -73,7 +73,7 @@ The following instruction would tell you how our most modules work. So you can c
 The data collection is not constructed in the current project environment, but we still give out our SMT constraint model collection module, you may construct it on your own. All the files are located in the `data_collection` directory.
 
 ## Collected data sharing
-Our collected data is available on <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets, which are constraint models generated with GNU Coreutils using angr and KLEE, BusyBox using angr, and from SMT-comp. You may get more information about the SMT competitions from <https://smt-comp.github.io/2020/>, we use this dataset(non-increment, QF_BV) in our experiment. To download original data, the address is <https://www.starexec.org/starexec/secure/explore/spaces.jsp?id=404954>. Our code specifically handles its file names so it's hard to use original data. So we release data of our version with solving time for this dataset so you can replay our prediction result. We may refactor the processing to match the name setting for this dataset if we are free.
+Our collected data is available on <https://doi.org/10.5281/zenodo.4722615> and <https://drive.google.com/drive/folders/1fiYNM4EymKbAjBFGwInHQXXb2y5mJ15N?usp=sharing>, which including four datasets, which are constraint models generated with GNU Coreutils using angr and KLEE, BusyBox using angr, and from SMT-comp. You may get more information about the SMT competitions from <https://smt-comp.github.io/2020/>, we use this dataset(non-increment, QF_BV) in our experiment. To download original data, the address is <https://www.starexec.org/starexec/secure/explore/spaces.jsp?id=404954>. Our code specifically handles its file names so it's hard to use original data. So we release data of our version with solving time for this dataset so you can replay our prediction result. We may refactor the processing to match the name setting for this dataset if we are free.
 
 #### Data selection
 The training data is heavily imbalanced, we conduct a random under-sampling to contain fewer fast-solving cases. So the result is a little different for different selections.
