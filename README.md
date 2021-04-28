@@ -1,4 +1,4 @@
-SMT solving is a bottleneck for symbolic execution. SMTimer provides a time prediction for SMT script solving for a certain solver(in our case `z3`). With the predicted solving time, symbolic execution can choose the path with a lower time to explore first, or directly skip the timeout cases without wasting time on them. This repository is the open-source project for `Boosting Symbolic Execution via Constraint Solving Time Prediction`. So some explanation would be related to the paper.
+SMT solving is a bottleneck for symbolic execution. SMTimer provides a time prediction for SMT script solving for a certain solver(in our case `z3`). With the predicted solving time, symbolic execution can choose the path with a lower time to explore first, or directly skip the timeout cases without wasting time on them. This repository is the open-source project for `Boosting Symbolic Execution via Constraint Solving Time Prediction`. We hope the guidance and the explanation would help you better understand the paper and reproduce the experiments.
 
 # Get Started
 To get started, we demonstrate the process based on a small example. For detail output meaning, please read the `Detail description`.
@@ -45,11 +45,11 @@ source run_NN_models.sh example
 ```
 Screen outputs: 
 + the processed SMT scripts number first, then the neural network training process on your screen
-+ the prediction of test dataset and more measurement result
++ the prediction of test dataset and more measurement results
 + a simulation result for program `arch`
 
 Saved results: 
-+ the model and evaluation results are saved in the `checkpoints` directory if you want to examine it and use the model. 
++ the model and evaluation results are saved in the `checkpoints` directory if you want to examine them and use the model. 
 + the simulation results are saved in the `simulation_result` directory.
 
 ## Increment-KNN (adaptive approach, cost about 1 minutes)
@@ -67,7 +67,23 @@ Saved results:
 + the simulation results are saved in the `simulation_result` directory.
 
 # Detail description
-The following instruction would tell you how our most modules work. So you can change the setting or replay the experiment result. The reference of the figures, the tables, the equations are from the above paper.
+The following instruction would tell you how our most modules work. So you can change the setting or reproduce the experiment result. The reference of the figures, the tables, the equations in our explanation are from the above paper.
+
+## Experiment reproduction
+
+With the project, you can reproduce three experiments. You can find the detail description in the quoted part.
+
++ the classification of timeout constraint models (Section 5.2.1, Table 2)
+
+     > Neural network - Evaluation <br> Increment-KNN - Training and evaluation
++ time prediction (Section 5.2.3, Table 4)
+
+    > Neural network - Evaluation
++ simulation for solving time (Section 5.3, Table 6)
+
+    > Neural network - Simulation <br> Increment-KNN - Simulation
+
+To reproduce experiments for different dataset, you need to change the dataset name in the path-related options. Just in case the hard coded problem, our dataset name is gnucore(for GNU coreutils(angr)), busybox(Busybox utilities(angr)), smt-comp(for SMT-COMP), klee(for GNU coreutils(KLEE)).
 
 ## Data collection
 The data collection is not constructed in the current project environment, but we still give out our SMT constraint model collection module, you may construct it on your own. All the files are located in the `data_collection` directory.
