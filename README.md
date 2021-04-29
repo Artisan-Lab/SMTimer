@@ -75,7 +75,9 @@ With the project, you can reproduce three experiments. You can find the detail d
 
 + the classification of timeout constraint models (Section 5.2.1, Table 2)
 
-     > Neural network - Evaluation <br> Increment-KNN - Training and evaluation
+     [a](####Evaluation)
+     Neural network - Evaluation
+     Increment-KNN - Training and evaluation
 + time prediction (Section 5.2.3, Table 4)
 
     > Neural network - Evaluation
@@ -158,7 +160,7 @@ For example, we use our GNU coreutil dataset to train incremental-KNN classifica
 
 Next, we introduce the command separately for a better explanation.
 
-#### Training and evaluation
+[nn_eva](#### Training and evaluation)
 The `train_KNN.py` does the feature extraction and KNN evaluation. The result of feature extraction would be saved in the path of `input`, so you can reuse the feature of scripts. We only provide the result for GNU(angr) in the JSON structure in the `KNN_training_data` directory, which is also used in our KNN predictor for symbolic execution tools. You can use it with `--input KNN_training_data/gnucore.json`. You should get the result in Table.2 and get a more detailed result for single programs.
 
 `python train_KNN.py --data_source data/gnucore/single_test --input data/gnucore/fv2_serial --time_selection z3 --time_limit_setting 200 --model_selection increment-knn`
