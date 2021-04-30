@@ -2,7 +2,7 @@ SMT solving is a bottleneck for symbolic execution. SMTimer provides a time pred
 
 This repository provides the toolkit described in the following paper
 
-`Boosting symbolic execution via constraint solving time prediction: An experience report`, Sicheng Luo, Hui Xu, Yanyang Bi, Yangfan Zhou, Xin Wang, to appear in *ISSTA 2021*
+`Boosting symbolic execution via constraint solving time prediction: An experience report`, to appear in *ISSTA 2021*
 
 We hope the guidance and the explanation would be helpful for readers to reproduce the experiments and reuse our toolkit and dataset.
 
@@ -83,7 +83,7 @@ With the project, you can reproduce three experiments. You can find the detailed
 
     [Neural network - Evaluation](#evaluationsection-52)
     
-    [Increment-KNN - Evaluation](#training-and-evaluationsection-42-52)
+    [Increment-KNN - Evaluation](#training-and-evaluationsection-43-52)
 + time prediction (*Section 5.2.3, Table 4*)
 
     [Neural network - Evaluation](#evaluationsection-52)
@@ -152,7 +152,7 @@ You can check the trained model with the same file using `load_file` options, th
 
 `python train.py --input data/gnucore/pad_feature --load_file g_pad_feature_l_z_r_200_0 --model lstm --time_selection z3 --regression`
 
-The result is an average value of cross-validation because the result difference is huge for different program selection. 
+The result is an average value of cross-validation because the result difference is huge for different program selection. Besides, data selection and random seed would affect the evaluation results. 
 
 #### Simulation(*Section 5.3*)
 Then, we simulate the solving time with our purposed system. The time is calculated with Eq.(1),(2) in the paper. The screen outputs show the data that predicted wrongly, and the simulation results shown in Table.6. The results include original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold, and tp, fn, fp cases numbers, also the classification measurement results for prediction(regression result would be classified with you setting threshold).
