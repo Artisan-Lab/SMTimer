@@ -122,7 +122,7 @@ Solving result meaning：
 + ```unknown``` for timeout constraints
 + ```error``` for errors of parsing, solving, and analysis.  
 
-Most solving result should be ```true``` and ```false```. The ```unknown``` should only appear when the solving time exceeds the time limit. If you are not sure that the solving phase works right, please **not use** the ```SMT_solving.sh```, because it directly adds the solving time into SMT files. The wrong solving time will **corrupt** the labels that use the average strategy. After you make sure the result is right, you can combine the time into the SMT files with 
+Most solving results should be ```true``` and ```false```. The ```unknown``` should only appear when the solving time exceeds the time limit. If you are not sure that the solving phase works right, please **not use** the ```SMT_solving.sh```, because it directly adds the solving time into SMT files. The wrong solving time will **corrupt** the labels that use the average strategy. After you make sure the result is right, you can combine the time into the SMT files with 
 
 `python merge_check_time.py --script_input data/gnucore/single_test`
 
