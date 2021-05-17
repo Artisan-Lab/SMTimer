@@ -19,16 +19,17 @@ from six.moves import cStringIO
 
 def parse_arg():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', default='./data/gnucore/query2')
-    parser.add_argument('--parser', default='pysmt')
-    parser.add_argument('--solver', default='z3')
-    parser.add_argument('--logic', default='QF_UFBV')
-    parser.add_argument('--pool_size', type=int, default=7)
-    parser.add_argument('--log_file', default='adjustment.log')
-    parser.add_argument('--ite_num', type=int, default=1)
-    parser.add_argument('--prefix', default='')
-    parser.add_argument('--end', default='')
-    parser.add_argument('--timeout', type=int, default=300)
+    parser.add_argument('--input', default='./data/gnucore/query2', help="the path of SMT files")
+    parser.add_argument('--parser', default='pysmt', help="parser for SMT scripts, only 'pysmt' or 'z3'")
+    parser.add_argument('--solver', default='z3', help="SMT solver, including 'all', 'msat', 'cvc4', 'yices', "
+                                                       "'btor', 'z3', make sure you install it before using")
+    parser.add_argument('--logic', default='QF_UFBV', help="not used by now")
+    parser.add_argument('--pool_size', type=int, default=7, help="multiprocess pool size")
+    parser.add_argument('--log_file', default='adjustment.log', help="result saving file")
+    parser.add_argument('--ite_num', type=int, default=1, help="the times of running")
+    parser.add_argument('--prefix', default='', help="prefix of SMT file, to filter other files")
+    parser.add_argument('--end', default='', help="suffix of SMT file, to filter other files")
+    parser.add_argument('--timeout', type=int, default=300, help="solving timeout")
     args = parser.parse_args()
     return args
 

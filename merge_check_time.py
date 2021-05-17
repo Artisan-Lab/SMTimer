@@ -5,11 +5,11 @@ from collections import defaultdict
 import re
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--script_input', default='./data/gnucore/query2')
-parser.add_argument('--adjust_log_path', default='adjustment.log')
-parser.add_argument('--prefix', default='')
-parser.add_argument("--output", default=None)
-parser.add_argument("--solver", default="z3")
+parser.add_argument('--script_input', default='./data/gnucore/single_test', help="the path of SMT files")
+parser.add_argument('--adjust_log_path', default='adjustment.log', help="solving time log file path")
+parser.add_argument('--prefix', default='', help="prefix of SMT file, to filter other files")
+parser.add_argument("--output", default=None, help="output file path, None for using input file path")
+parser.add_argument("--solver", default="z3", help="SMT solver, including 'msat', 'cvc4', 'yices', 'btor', 'z3'")
 args = parser.parse_args()
 
 time_dict = defaultdict(dict)

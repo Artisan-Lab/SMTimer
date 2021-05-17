@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# to show the normal solving result, we provide the solving time log for example dataset in adjustment.log
+
 if [ -n "$1" ]
 then
 	if [ $1 == "example" ]

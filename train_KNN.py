@@ -143,14 +143,14 @@ def odds_ratio_test(train_dataset):
                 continue
             if y_wo < 10:
                 if i < len(op):
-                    print(i, op[i], "too little without scripts")
+                    print(i, op[i], "too little scripts without the operator")
                 elif i >= 111:
                     continue
                     # print(i, "var", "unsuitable")
                 continue
             if y_w < 10:
                 if i < len(op):
-                    print(i, op[i], "too little with scripts")
+                    print(i, op[i], "too little scripts with the operator")
                 elif i >= 111:
                     continue
                     # print(i, "var", "unsuitable")
