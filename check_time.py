@@ -39,6 +39,7 @@ solver_list = ["msat", "cvc4", "yices", "btor", "z3"]
 
 
 def smtfun(data, filename, timeout=300, solver_name="z3"):
+    base_dir = os.getcwd()
     # to debug the parsing and solving error, you may use the code below which is a copy of solve.py
     #
     # signal.signal(signal.SIGALRM, handler)
@@ -59,8 +60,8 @@ def smtfun(data, filename, timeout=300, solver_name="z3"):
     s = time.time()
     try:
         result = EasyProcess(
-            '/home/lsc/lsc/query-solvability/bin/python {} {} {}'.format(
-                "/home/lsc/treelstm.pytorch/solve.py",
+            'python {} {} {}'.format(
+                os.path.join(base_dir, "solve.py"),
                 filename,
                 solver_name
             )
@@ -76,8 +77,9 @@ def smtfun(data, filename, timeout=300, solver_name="z3"):
         else:
             res = result
     except:
+        # traceback.print_exc()
         e = time.time()
-        res = "unknown"
+        res = "error"
         t = str(e - s)
     st = filename + ', solver: ' + solver_name + ', result: ' + str(res) + ', time:' + t
     logger.info(st)

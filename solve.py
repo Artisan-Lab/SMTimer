@@ -54,11 +54,6 @@ if __name__ == '__main__':
         data = data.replace("bvudiv_i", "bvudiv")
         data = data.replace("bvsdiv_i", "bvsdiv")
         script = parser.get_script(cStringIO(data))
-        # i = 0
-        # for ind, asse in enumerate(script.commands):
-        #     if asse.name == "assert":
-        #         i = ind
-        # script.commands.remove(script.commands[i])
         s = time.time()
         log = script.evaluate(solver)
         e = time.time()

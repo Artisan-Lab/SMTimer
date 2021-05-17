@@ -209,8 +209,8 @@ def main(args):
     if args.model == "tree-lstm":
         trainer = Trainer(args, model, criterion, optimizer, device, metric, metric_name)
         random.shuffle(train_dataset)
-        train_dataset = dgl_dataset(train_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
-        test_dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
+        train_dataset = dgl_dataset(train_dataset, pretrained_emb, smt_vocab, task, args.time_selection, args.threshold)
+        test_dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection, args.threshold)
 
         train_loader = DataLoader(dataset=train_dataset,
                                   batch_size=args.batch_size,
@@ -308,7 +308,7 @@ def evaluate_once(args, device, metric_list, metric_name, pretrained_emb, smt_vo
                                  collate_fn=pad_feature_batcher(device, args.time_selection, task, args.threshold),
                                  shuffle=False, num_workers=0)
     elif args.model == "tree-lstm":
-        dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection)
+        dataset = dgl_dataset(test_dataset, pretrained_emb, smt_vocab, task, args.time_selection, args.threshold)
         test_loader = DataLoader(dataset=dataset,
                                  batch_size=100, collate_fn=batcher(device), shuffle=False, num_workers=0)
     else:

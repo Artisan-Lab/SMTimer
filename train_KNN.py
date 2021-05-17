@@ -57,8 +57,9 @@ def main(args):
 
     # some data analyse for the data
     # cor(data)
-    # odds_ratio_test(data)
-    # return
+    if args.odds_ratio:
+        odds_ratio_test(data)
+        # return
 
     for fn in test_filename:
         if "smt-comp" in args.input:
@@ -134,23 +135,25 @@ def odds_ratio_test(train_dataset):
         index = np.argwhere(x_with == True).reshape(-1)
         y_wop, y_wo = sum(y[index]), len(index)
         try:
-            # print(op[i])
             # print(y_wp, y_w)
             # print(y_wop, y_wo)
             if y_w == 0:
-                print("absent")
+                if i < len(op):
+                    print(i, op[i], "absent of operator")
                 continue
             if y_wo < 10:
                 if i < len(op):
-                    print(i, op[i], "little without")
+                    print(i, op[i], "too little without scripts")
                 elif i >= 111:
-                    print(i, "var", "unsuitable")
+                    continue
+                    # print(i, "var", "unsuitable")
                 continue
             if y_w < 10:
                 if i < len(op):
-                    print(i, op[i], "little with")
+                    print(i, op[i], "too little with scripts")
                 elif i >= 111:
-                    print(i, "var", "unsuitable")
+                    continue
+                    # print(i, "var", "unsuitable")
                 continue
             if i < len(op):
                 print(i, op[i], (y_wp / y_w) / (y_wop / y_wo))
@@ -225,7 +228,10 @@ def load_dataset(args):
     output_dir = os.path.join( args.input)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    train_file = os.path.join(output_dir, 'train')
+    if os.path.isdir(output_dir):
+        train_file = os.path.join(output_dir, 'train')
+    else:
+        train_file = output_dir
     if os.path.isfile(train_file):
         train_dataset = construct_data_from_json(train_file)
         # train_dataset = th.load(train_file)
@@ -249,6 +255,7 @@ def load_dataset(args):
 def parse_arg():
     # global args
     parser = argparse.ArgumentParser()
+    parser.add_argument('--odds_ratio', action='store_true', help="print odds_ratio for all features")
     parser.add_argument('--data_source', default='gnucore/fv2', help="scripts saving directory")
     parser.add_argument('--input', default='gnucore/training', help="saving directory of feature after "
                             "extraction, avoid duplicate preprocess")

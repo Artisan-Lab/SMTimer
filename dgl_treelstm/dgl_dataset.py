@@ -9,13 +9,14 @@ from torch import nn
 SMTBatch = namedtuple('SMTBatch', ['graph', 'wordid', 'label'])
 
 class dgl_dataset(object):
-    def __init__(self, data, embedding, vocab=None, task="regression", time_selection="original"):
+    def __init__(self, data, embedding, vocab=None, task="regression", time_selection="original", time_threshold=200):
         self.trees = []
         self.task = task
         self.time_selection = time_selection
         self.filename_list = []
         self.vocab = vocab
         self.num_classes = 2
+        self.time_threshold = time_threshold
         # self.embedding = nn.Embedding(133, 150)
         # self.embedding.weight.data.copy_(embedding)
         self._load(data)
@@ -52,7 +53,7 @@ class dgl_dataset(object):
             if isinstance(solving_time, bool):
                 result = 1 if solving_time else 0
             else:
-                result = 1 if solving_time > 200 else 0
+                result = 1 if solving_time > self.time_threshold else 0
         else:
             result = solving_time
             if not result:

@@ -108,9 +108,15 @@ class feature_extractor:
         else:
             time_list = self.script_info.solving_time_dic
         if time_list:
-            time_list = [float(x) for x in time_list]
-            # self.adjust_time = max(time_list)
-            self.adjust_time = sum(time_list) / len(time_list)
+            valid_time_list = []
+            for x in time_list:
+                if float(x) > 0:
+                    valid_time_list.append(float(x))
+                # self.adjust_time = max(time_list)
+            if len(valid_time_list) == 0:
+                self.adjust_time = 0
+            else:
+                self.adjust_time = sum(valid_time_list) / len(valid_time_list)
         else:
             self.adjust_time = 0
         if self.script_info.solving_time:

@@ -215,7 +215,7 @@ class TreeLSTM_Simulation(Simulation):
         smt_vocab_file = './data/gnucore/smt.vocab'
         smt_vocab = Vocab(filename=smt_vocab_file,
                           data=[Constants.UNK_WORD])
-        data = dgl_dataset([data], None, vocab=smt_vocab,time_selection=self.time_selection)
+        data = dgl_dataset([data], None, vocab=smt_vocab, time_selection=self.time_selection, time_threshold=self.threshold)
         dataloader = DataLoader(dataset=data, batch_size=1, collate_fn=batcher("cpu"),
                                 shuffle=False, num_workers=0)
         iterator = iter(dataloader)
@@ -394,7 +394,7 @@ def make_PCC_output(input, output_result):
                         "total_time": final_time, "input": input, "pos_num":sum(truth), "tp": sum(truth)*rec,
                     "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
         print(print_output)
-        output = {"train_dataset": "gnucore", "test_dataset": "gnucore", "predicted_solving_time": pred,
+        output = {"train_dataset": "gnucore", "test_dataset": "gnucore", "predicted_result": pred,
                   "acutal_solving_time": truth, "original_time": original_time, "total_time": final_time,
                   "metrics": {"acc": acc, "pre": pre, "rec": rec, "f1": f1, "pos_num":sum(truth), "tp": sum(truth)*rec,
                     "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec},
@@ -443,7 +443,7 @@ def make_output(dsn1, dsn2, input, simulation, result, time_section, output_resu
     #                 "fn": sum(truth)*(1 - rec), "fp": sum(truth)*rec/pre - sum(truth)*rec}
     print_output = {"timeout_query_num":sum(truth), "true-positive number": confusion_matrix[1][1],
                     "false-negative number": confusion_matrix[1][0], "false-positive number": confusion_matrix[0][1]}
-    output = {"train_dataset": dsn1, "test_dataset": dsn2, "predicted_solving_time": result.pred.tolist(),
+    output = {"train_dataset": dsn1, "test_dataset": dsn2, "predicted_result": result.pred.tolist(),
               "acutal_solving_time": result.truth.tolist(), "original_time": time_section.original_time, "predict_time":
               time_section.predict_time + time_section.preprocessing_time, "total_time": time_section.final_time,
               "metrics":{"acc": acc, "pre": pre, "rec": rec, "f1": f1}, "time_out_setting": simulation.time_out_setting,
@@ -572,7 +572,7 @@ def simulation_for_single_program(test_directory, args):
         if model_name != "KNN" and not regression:
             pred = th.argmax(F.log_softmax(predict_result), 1)
             skip = pred == 1
-            predict_result = 300 if skip else 0
+            predict_result = 1 if skip else 0
         time_section.update(skip, solve_time)
         result.add(predict_result, solve_time, skip)
         aindex += 1

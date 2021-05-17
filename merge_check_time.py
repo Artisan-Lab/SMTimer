@@ -6,14 +6,14 @@ import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--script_input', default='./data/gnucore/query2')
-parser.add_argument('--check_input', default='adjustment.log')
+parser.add_argument('--adjust_log_path', default='adjustment.log')
 parser.add_argument('--prefix', default='')
 parser.add_argument("--output", default=None)
 parser.add_argument("--solver", default="z3")
 args = parser.parse_args()
 
 time_dict = defaultdict(dict)
-with open(args.check_input, "r") as f:
+with open(args.adjust_log_path, "r") as f:
     data = f.read()
 time_list = data.split('\n')
 solver = args.solver
@@ -83,6 +83,9 @@ for root, dir, files in os.walk(args.script_input):
                         else:
                             if key in data["solving_time_dic"].keys():
                                 data["solving_time_dic"][key].extend(item)
+                                check_valid = data["solving_time_dic"][key]
+                                while(-1 in check_valid and len(check_valid) > 1):
+                                    check_valid.remove(-1)
                             else:
                                 data["solving_time_dic"][key] = item
                     # data["solving_time_dic"] = time_dict[file]
