@@ -114,7 +114,17 @@ pysmt-install --z3
 
 You can use this script to solve the SMT scripts and add the solving time into your SMT files. You may find the detail setting in `check_time.py`, `solve.py`. You need to change the logic in `solve.py` if you want to use other reasoning theories.
 
-`source SMTsolving.sh`
+`python check_time.py --input data/gnucore/single_test`
+
+Solving result meaning：
++ ```true``` for ```sat```
++ ```false``` for ```unsat```
++ ```unknown``` for timeout constraints
++ ```error``` for errors of parsing, solving, and analysis.  
+
+Most solving result should be ```true``` and ```false```. The ```unknown``` should only appear when the solving time exceeds the time limit. If you are not sure that the solving phase works right, please **not use** the ```SMT_solving.sh```, because it directly adds the solving time into SMT files. The wrong solving time will **corrupt** the labels that use the average strategy. After you make sure the result is right, you can combine the time into the SMT files with 
+
+`python merge_check_time.py --script_input data/gnucore/single_test`
 
 ## Neural network (non-adaptive approach)
 
@@ -145,17 +155,17 @@ The `train.py` does the feature extraction, neural network training, and some ev
 + --cross_index 0/1/2, we experiment with three-fold cross-validation, you may find the result difference is huge, which is a motivation to use the adaptive approach
 + --tree_for_assert, true for using abstract trees as tree nodes in the tree-LSTM model
 
- For tree-LSTM, our model uses the feature vector instead of the abstract tree by default, which makes it functionally works like LSTM. But you may use `--tree_for_assert` option to use the abstract tree. To make it more practicable, we make some inductions, which replace oversized abstract trees with vectors. Our results suggest the improvement does not worth the cost. If you want to further research the tree structure, you could work on it in `preprocessing/abstract_tree_extraction.py`.
+ For tree-LSTM, our model uses the feature vector instead of the abstract tree by default, which makes it functionally works like LSTM. But you may use `--tree_for_assert` option to use the abstract tree. To make it more practicable, we make some inductions, which replace oversized abstract trees with vectors. Our results suggest the improvement does not worth the cost of using abstract trees. If you want to further research the tree structure, you could work on it in `preprocessing/abstract_tree_extraction.py`.
  
 #### Evaluation(*Section 5.2*)
-You can check the trained model with the same file using `load_file` options, the other setting should be the same as the last command. The evaluation result includes more measurement results (e.g. MAE for regression, precision,recall,f1_score,confusion_matrix for classification) and the predicted result for the selected test dataset. The result would also be saved in the `checkpoints` directory, the result name is in the format of `dataset_evaulation_task_index.pkl`.
+You can check the trained model with the same file using `load_file` options, the other setting should be the same as the last command. The evaluation result includes more measurement results (e.g. MAE for regression, precision, recall, f1_score, confusion_matrix for classification) and the predicted result for the selected test dataset. The result would also be saved in the `checkpoints` directory, the result name is in the format of `dataset_evaulation_task_index.pkl`.
 
 `python train.py --input data/gnucore/pad_feature --load_file g_pad_feature_l_z_r_200_0 --model lstm --time_selection z3 --regression`
 
 The result is an average value of cross-validation because the result difference is huge for different program selection. Besides, data selection and random seed would affect the evaluation results. 
 
 #### Simulation(*Section 5.3*)
-Then, we simulate the solving time with our purposed system. The time is calculated with Eq.(1),(2) in the paper. The screen outputs show the data that predicted wrongly, and the simulation results shown in Table.6. The results include original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold, and tp, fn, fp cases numbers, also the classification measurement results for prediction(regression result would be classified with you setting threshold).
+Then, we simulate the solving time with our purposed system. The time is calculated with Eq.(1),(2) in the paper. The screen outputs show the data that predicted wrongly, and the simulation results shown in Table.6. The results include original solving time, solving time after boosting(total_time), timeout constraints number with your setting threshold, and tp, fn, fp cases numbers, also the classification measurement results for prediction(regression result would be classified with your setting threshold).
 
 `python simulation.py --model_name lstm --load_file checkpoints/g_pad_feature_l_z_r_200_0.pkl --test_directory data/gnucore/single_test/arch --time_selection adjust --regression`
 
@@ -175,7 +185,9 @@ The `train_KNN.py` does the feature extraction and KNN evaluation. The result of
 
 `python train_KNN.py --data_source data/gnucore/single_test --input data/gnucore/fv2_serial --time_selection z3 --time_limit_setting 200 --model_selection increment-knn`
 
-We support two main settings including KNN implemented in sklearn(non-adaptive so poor in performance, better in efficiency, mainly for comparison), incremental-KNN. You may use different command-line arguments. 
+We support two main settings including KNN implemented in sklearn (non-adaptive, so poor in performance, better in efficiency, mainly for comparison), incremental-KNN. You may use different command-line arguments. 
+
++ --odds_ratio, print the odds ratio for all operators to analyze their influence on solving time (*Table 3*)
  
 #### Simulation(*Section 5.3*)
 The following description is the same as the neural network simulation. Just in case you skip the neural network part, we repeat the description.
