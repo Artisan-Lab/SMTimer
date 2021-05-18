@@ -90,9 +90,8 @@ def main(args):
 
     best_epoch = -1
 
-    cuda = args.gpu >= 0
-    device = th.device('cuda:{}'.format(args.gpu)) if cuda else th.device('cpu')
-    if device != th.device('cpu') and cuda:
+    device = th.device('cuda:{}'.format(args.gpu)) if th.cuda.is_available() else th.device('cpu')
+    if device != th.device('cpu'):
         th.cuda.set_device(args.gpu)
 
     smt_vocab_file = 'smt.vocab'
