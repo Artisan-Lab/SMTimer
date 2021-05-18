@@ -92,7 +92,7 @@ def main(args):
 
     cuda = args.gpu >= 0
     device = th.device('cuda:{}'.format(args.gpu)) if cuda else th.device('cpu')
-    if cuda:
+    if device != th.device('cpu') and cuda:
         th.cuda.set_device(args.gpu)
 
     smt_vocab_file = 'smt.vocab'

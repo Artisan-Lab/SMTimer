@@ -72,10 +72,12 @@ def smtfun(data, filename, timeout=300, solver_name="z3"):
         result = result.stdout
         print(result)
 
-        result, t = result.split(" ")
-        if not result:
+        if result == "":
             res = "unknown"
+            e = time.time()
+            t = str(e - s)
         else:
+            result, t = result.split(" ")
             res = result
     except:
         # traceback.print_exc()
